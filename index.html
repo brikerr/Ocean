@@ -1,0 +1,2963 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Interactive pelagic zone visualization — ocean depth layers, temperature, pressure, and bioluminescence in a vertical column view.">
+<meta name="theme-color" content="#FFFFFF">
+<title>Ocean Depths</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F30A;</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Karla:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<style>
+  :root {
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Karla', system-ui, sans-serif;
+    --ease: ease-in-out;
+    --ease-out: ease-out;
+    --dur: 400ms;
+  }
+
+  [data-theme="light"] {
+    --bg: #FFFFFF; --surface: #F5F5F5; --surface-hover: #EBEBEB;
+    --text: #1A1A1A; --text-secondary: #4A4A4A; --text-muted: #757575;
+    --border: rgba(0,0,0,0.13); --border-hover: rgba(0,0,0,0.25);
+    --primary: #1A6B8A; --secondary: #2A9D8F; --secondary-muted: rgba(42,157,143,0.08);
+    --tertiary: #264653; --tertiary-muted: rgba(38,70,83,0.08);
+    --tooltip-bg: #1A1A1A; --tooltip-text: #F5F5F5;
+    --dot-color: rgba(0,0,0,0.05);
+  }
+
+  [data-theme="dark"] {
+    --bg: #060d14; --surface: #0c1820; --surface-hover: #142430;
+    --text: #d0dce8; --text-secondary: #7a9ab8; --text-muted: #4a6a84;
+    --border: rgba(100,160,220,0.10); --border-hover: rgba(100,160,220,0.20);
+    --primary: #4A9CC8; --secondary: #4ECDC4; --secondary-muted: rgba(78,205,196,0.08);
+    --tertiary: #3A7CA5; --tertiary-muted: rgba(58,124,165,0.06);
+    --tooltip-bg: #d0dce8; --tooltip-text: #060d14;
+    --dot-color: rgba(100,160,220,0.03);
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body); font-size: 14px;
+    min-height: 100dvh; display: flex; justify-content: center;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+
+  .page {
+    display: flex; flex-direction: column; width: 100%; max-width: 100%;
+    height: 100dvh; max-height: 100dvh; overflow: hidden; padding: 2px 16px 16px;
+  }
+
+  .header { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0; }
+  .header-text h1 {
+    font-family: var(--font-display); font-weight: 300; font-style: italic;
+    font-size: clamp(32px, 5vw, 48px); line-height: 1.05; letter-spacing: -0.01em;
+  }
+
+  .theme-btn {
+    position: fixed; top: 12px; right: 12px; z-index: 50;
+    width: 40px; height: 40px; border: none; border-radius: 0;
+    background: var(--bg); color: var(--text-muted); cursor: pointer;
+    display: grid; place-items: center;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .theme-btn:hover { color: var(--text-secondary); background: var(--surface); }
+  .theme-btn .material-symbols-outlined { font-size: 20px; }
+
+  .palette-picker {
+    position: fixed; top: 12px; right: 58px; z-index: 50;
+    height: 40px;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .palette-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid transparent; cursor: pointer; padding: 0;
+    transition: border-color .2s, transform .15s;
+  }
+  .palette-dot:hover { transform: scale(1.25); }
+  .palette-dot.active { border-color: var(--primary); }
+
+  .stats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 0; justify-content: center; }
+  .stat {
+    position: relative; display: inline-flex; align-items: center; gap: 7px;
+    padding: 0 24px; height: 38px; border: none;
+    border-bottom: 1px solid var(--border); border-radius: 0;
+    background: transparent; cursor: default; transition: all var(--dur) var(--ease);
+  }
+  .stat:hover { border-bottom-color: var(--border-hover); }
+  .stat .k { font-family: var(--font-body); font-size: 10px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .stat .k::after { content: ''; margin: 0; }
+  .stat .v { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .stat.c-primary .v { color: var(--primary); }
+  .stat.c-secondary .v { color: var(--secondary); }
+
+  .tooltip {
+    position: fixed; z-index: 100; max-width: 260px;
+    padding: 10px 14px; border-radius: 0;
+    background: var(--tooltip-bg); color: var(--tooltip-text);
+    font-size: 12.5px; line-height: 1.45; pointer-events: none;
+    opacity: 0; transition: opacity 180ms var(--ease); border: 1px solid var(--border);
+  }
+  .tooltip.visible { opacity: 1; }
+
+  .viz { flex: 1; min-height: 0; display: flex; align-items: stretch; justify-content: center; position: relative; }
+  canvas { display: block; cursor: crosshair; width: 100%; height: 100%; }
+
+  .phase-tooltip {
+    position: absolute; z-index: 100; max-width: 300px; min-width: 220px;
+    padding: 14px 16px; border-radius: 0;
+    background: var(--tooltip-bg); color: var(--tooltip-text);
+    font-size: 12.5px; line-height: 1.5; pointer-events: none;
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+    border: 1px solid var(--border);
+  }
+  .phase-tooltip.visible { opacity: 1; transform: translateY(0); }
+  .phase-tooltip .zt-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; color: var(--tooltip-text); }
+  .phase-tooltip .zt-range { font-size: 11px; opacity: 0.55; margin-bottom: 8px; }
+  .phase-tooltip .zt-item { padding: 2px 0 2px 12px; position: relative; font-size: 12px; line-height: 1.45; }
+  .phase-tooltip .zt-item::before { content: '\2022'; position: absolute; left: 0; opacity: 0.4; }
+  .phase-tooltip .zt-res { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(128,128,128,0.15); font-size: 11.5px; font-style: italic; opacity: 0.7; }
+
+  .controls {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; flex-wrap: wrap; padding: 6px 0 2px;
+  }
+  .ctrl-label { font-family: var(--font-body); font-size: 10px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+
+  .btn-group {
+    display: inline-flex; height: 38px; border-radius: 0;
+    border: 1px solid var(--border); overflow: hidden;
+    transition: border-color var(--dur) var(--ease);
+  }
+  .btn-group:hover { border-color: var(--border-hover); }
+
+  .gbtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 100%; padding: 0 16px; border: none;
+    background: transparent; color: var(--text-muted);
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 180ms var(--ease);
+    position: relative; -webkit-tap-highlight-color: transparent;
+  }
+  .gbtn + .gbtn::before {
+    content: ''; position: absolute; left: 0; top: 28%; height: 44%;
+    width: 1px; background: var(--border); transition: opacity 180ms;
+  }
+  .gbtn:hover { color: var(--text-secondary); background: var(--surface); }
+  .gbtn.on { color: var(--text); background: transparent; border-bottom: 2px solid var(--text); }
+  .gbtn.on::before, .gbtn.on + .gbtn::before { opacity: 0; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 34px; padding: 0 12px; border-radius: 0;
+    border: 1px solid var(--border); background: transparent;
+    font-family: var(--font-body); font-size: 11px; font-weight: 500;
+    cursor: pointer; transition: all 180ms var(--ease);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .chip .material-symbols-outlined { font-size: 16px; }
+  .chip.temp { color: var(--tertiary); }
+  .chip.temp.on { background: transparent; border-color: var(--tertiary); }
+  .chip.temp:not(.on) { color: var(--text-muted); }
+  .chip.overlay { color: var(--secondary); }
+  .chip.overlay.on { background: transparent; border-color: var(--secondary); }
+  .chip.overlay:not(.on) { color: var(--text-muted); }
+
+  .capture-btns {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    display: flex; gap: 8px;
+  }
+  .cap-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px; border: none; background: transparent;
+    font-family: var(--font-body); font-size: 10px; font-weight: 500;
+    color: var(--text-muted); cursor: pointer;
+    transition: all 180ms var(--ease); -webkit-tap-highlight-color: transparent;
+  }
+  .cap-btn:hover { color: var(--text-secondary); }
+  .cap-btn .material-symbols-outlined { font-size: 13px; }
+  .cap-btn.recording { color: #E53E3E; animation: recordPulse 1.2s ease-in-out infinite; }
+  .cap-btn.ambiance-on { color: var(--primary); }
+  @keyframes recordPulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+  .ambiance-btn { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+
+  .rec-indicator {
+    position: absolute; top: 16px; right: 16px; z-index: 40;
+    display: none; align-items: center; gap: 8px;
+    padding: 6px 14px; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #fff;
+  }
+  .rec-indicator .rec-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #E53E3E; animation: recordPulse 1.2s ease-in-out infinite;
+  }
+
+  .legend {
+    display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;
+    padding: 8px 0 0; position: relative;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 5px;
+    font-family: var(--font-body); font-size: 10px; font-weight: 500;
+    color: var(--text-muted); cursor: default; padding: 4px 8px;
+    border-radius: 0; transition: all 180ms var(--ease); position: relative;
+  }
+  .legend-item:hover { color: var(--text-secondary); background: var(--surface); }
+  .legend-item.dimmed { opacity: 0.25; }
+  .legend-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    user-select: none;
+  }
+
+  #puck3dContainer {
+    position: absolute; bottom: 8px; right: 8px;
+    width: 440px; height: 540px;
+    pointer-events: auto;
+    opacity: 0; animation: rise 800ms ease-in-out 500ms both;
+  }
+  #puck3dContainer canvas { cursor: grab; }
+  #puck3dContainer canvas:active { cursor: grabbing; }
+  .rotate-hint {
+    position: absolute; bottom: -18px; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-family: var(--font-body); font-size: 9px; font-weight: 400;
+    color: var(--text-muted); opacity: 0; letter-spacing: 0.3px;
+    animation: hintFade 6s ease-in-out 1.5s both; pointer-events: none;
+  }
+  .rotate-hint .material-symbols-outlined { font-size: 12px; }
+  @keyframes hintFade { 0% { opacity: 0; } 12% { opacity: 0.5; } 70% { opacity: 0.5; } 100% { opacity: 0; } }
+
+  .info-blurb {
+    position: absolute; bottom: 48px; left: 16px; max-width: 260px;
+    pointer-events: none; opacity: 0; animation: rise 800ms ease-in-out 600ms both;
+  }
+  .info-blurb h3 {
+    font-family: var(--font-display); font-weight: 400; font-style: italic;
+    font-size: 15px; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: -0.01em;
+  }
+  .info-blurb p {
+    font-family: var(--font-body); font-size: 10.5px; font-weight: 400;
+    line-height: 1.6; color: var(--text-muted);
+  }
+
+  @keyframes rise { from { opacity: 0; } to { opacity: 1; } }
+
+  .tour-btn-fixed {
+    position: fixed; top: 12px; left: 12px; z-index: 50;
+    width: 40px; height: 40px; border: none; border-radius: 0;
+    background: var(--bg); color: var(--text-muted); cursor: pointer;
+    display: grid; place-items: center;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .tour-btn-fixed:hover { color: var(--text-secondary); background: var(--surface); }
+  .tour-btn-fixed .material-symbols-outlined { font-size: 20px; }
+  body.tour-active .tour-btn-fixed { opacity: 0.12; pointer-events: none; }
+
+  body.tour-active .header, body.tour-active .stats, body.tour-active .controls,
+  body.tour-active .legend, body.tour-active .theme-btn, body.tour-active .palette-picker {
+    opacity: 0.12; pointer-events: none; transition: opacity 600ms var(--ease);
+  }
+  body.tour-active #puck3dContainer { opacity: 0.15; pointer-events: none; transition: opacity 600ms var(--ease); }
+  body.tour-active .tour-spotlight { opacity: 1 !important; pointer-events: none; transition: opacity 400ms var(--ease); }
+  body.tour-active .controls:has(.tour-spotlight),
+  body.tour-active .stats:has(.tour-spotlight),
+  body.tour-active .legend:has(.tour-spotlight) { opacity: 1 !important; pointer-events: none; transition: opacity 400ms var(--ease); }
+  body.tour-active .info-blurb { opacity: 1 !important; pointer-events: none; transition: opacity 400ms var(--ease); }
+  body.tour-active .info-blurb p { font-size: 11px; line-height: 1.65; }
+  .tour-char { display: inline; opacity: 0; filter: blur(3px); transition: opacity 200ms ease-out, filter 280ms ease-out; }
+  .tour-char.revealed { opacity: 1; filter: blur(0); }
+
+  .tour-controls {
+    position: absolute; bottom: 60px; right: 16px;
+    display: flex; gap: 8px; z-index: 40;
+    opacity: 0; pointer-events: none; transition: opacity 400ms var(--ease);
+  }
+  body.tour-active .tour-controls { opacity: 1; pointer-events: auto; }
+
+  .tour-ctrl-btn {
+    width: 36px; height: 36px;
+    border: 1px solid rgba(255,255,255,0.3); border-radius: 0;
+    background: rgba(0,0,0,0.4); color: #fff;
+    cursor: pointer; display: grid; place-items: center;
+    backdrop-filter: blur(8px); transition: background 180ms var(--ease);
+  }
+  .tour-ctrl-btn:hover { background: rgba(0,0,0,0.6); }
+  .tour-ctrl-btn .material-symbols-outlined { font-size: 18px; }
+
+  .tour-progress {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; z-index: 40;
+    opacity: 0; pointer-events: none; transition: opacity 400ms var(--ease);
+  }
+  body.tour-active .tour-progress { opacity: 1; }
+  .tour-pip {
+    width: 24px; height: 3px; background: rgba(255,255,255,0.2);
+    transition: background 300ms var(--ease), width 300ms var(--ease);
+  }
+  .tour-pip.active { background: rgba(255,255,255,0.8); width: 36px; }
+  .tour-pip.done { background: rgba(255,255,255,0.45); }
+
+  @media (max-width: 600px) {
+    .page { padding: 8px 8px 8px; }
+    .header-text h1 { font-size: 28px; }
+    .stat { height: 30px; padding: 0 12px; }
+    .btn-group { height: 34px; }
+    .gbtn { padding: 0 13px; font-size: 12px; }
+    .chip { height: 30px; padding: 0 10px; font-size: 11px; }
+    #puck3dContainer { width: 180px; height: 280px; }
+    .tour-ctrl-btn { width: 30px; height: 30px; }
+    .tour-ctrl-btn .material-symbols-outlined { font-size: 16px; }
+    .tour-controls { bottom: 48px; right: 10px; gap: 6px; }
+    .palette-picker { right: 50px; gap: 4px; }
+    .palette-dot { width: 13px; height: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="palette-picker" id="palettePicker">
+  <button class="palette-dot active" data-palette="abyss" style="background:#1a3a5c;" title="Abyss"></button>
+  <button class="palette-dot" data-palette="bioluminescent" style="background:#00e5a0;" title="Bioluminescent"></button>
+  <button class="palette-dot" data-palette="thermal" style="background:#ff6633;" title="Thermal"></button>
+  <button class="palette-dot" data-palette="arctic" style="background:#a0d8ef;" title="Arctic"></button>
+  <button class="palette-dot" data-palette="coral" style="background:#ff7f7f;" title="Coral"></button>
+</div>
+<button class="theme-btn" id="themeToggle" aria-label="Toggle theme">
+  <span class="material-symbols-outlined" id="themeIcon">dark_mode</span>
+</button>
+<button class="tour-btn-fixed" id="tourStartBtn" aria-label="Start guided tour">
+  <span class="material-symbols-outlined">auto_stories</span>
+</button>
+<div class="page">
+  <header class="header" style="animation: rise 800ms ease-in-out both; animation-delay: 0ms;">
+    <div class="header-text">
+      <h1>Ocean Depths</h1>
+    </div>
+  </header>
+
+  <div class="stats" style="animation: rise 800ms ease-in-out both; animation-delay: 100ms;">
+    <div class="stat c-primary" id="statTempPill" data-tooltip="Temperature at the surface. Tropical surface waters average 25-28 C."><span class="k">Temp</span><span class="v" id="statTemp">26 C</span></div>
+    <div class="stat c-primary" id="statPressurePill" data-tooltip="Hydrostatic pressure increases by ~1 atm per 10m depth."><span class="k">Pressure</span><span class="v" id="statPressure">1 atm</span></div>
+    <div class="stat c-secondary" id="statLightPill" data-tooltip="Photosynthetically active radiation. Drops exponentially with depth."><span class="k">Light</span><span class="v" id="statLight">100%</span></div>
+    <div class="stat" id="statO2Pill" data-tooltip="Dissolved oxygen concentration. An oxygen minimum zone exists at 200-1000m."><span class="k">O&#8322;</span><span class="v" id="statO2">6.4 ml/L</span></div>
+    <div class="stat" id="statSalinityPill" data-tooltip="Salinity in practical salinity units. Varies with evaporation and freshwater input."><span class="k">Salinity</span><span class="v" id="statSalinity">35.0 psu</span></div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <div class="viz" id="canvasContainer" style="animation: rise 800ms ease-in-out both; animation-delay: 200ms;">
+    <canvas id="extraction"></canvas>
+    <div class="phase-tooltip" id="phaseTooltip"></div>
+    <div class="info-blurb">
+      <h3>The Ocean Column</h3>
+      <p>This visualization maps the ocean's vertical structure as five pelagic zones, from sunlit surface to hadal trench. Each zone harbors distinct ecosystems shaped by light, temperature, and pressure. The column view reveals how these gradients drive life at every depth. Adjust the shelf profile and ocean mode to explore tropical, polar, upwelling, and hydrothermal vent conditions.</p>
+    </div>
+    <div id="puck3dContainer">
+      <div class="rotate-hint"><span class="material-symbols-outlined">3d_rotation</span>Drag to rotate</div>
+    </div>
+    <div class="tour-controls" id="tourControlsBar">
+      <button class="tour-ctrl-btn" id="tourPauseBtn"><span class="material-symbols-outlined">pause</span></button>
+      <button class="tour-ctrl-btn" id="tourSkipBtn"><span class="material-symbols-outlined">skip_next</span></button>
+      <button class="tour-ctrl-btn" id="tourExitBtn"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="tour-progress" id="tourProgress"></div>
+    <div class="rec-indicator" id="recIndicator"><div class="rec-dot"></div><span id="recCountdown">5s</span></div>
+  </div>
+
+  <div class="controls" style="animation: rise 800ms ease-in-out both; animation-delay: 300ms;">
+    <div class="btn-group" id="levelGroup">
+      <button class="gbtn" data-level="0" data-tooltip="Shallow coastal waters over a wide continental shelf. Surface zones dominate.">Shelf</button>
+      <button class="gbtn on" data-level="1" data-tooltip="Continental slope where the seafloor drops off. Balanced zone distribution.">Slope</button>
+      <button class="gbtn" data-level="2" data-tooltip="Open-ocean abyssal plain. Deep zones dominate, thin surface layer.">Abyss</button>
+      <button class="gbtn" data-level="3" data-tooltip="Ocean trench profile reaching extreme depth. The deepest places on Earth.">Hadal</button>
+    </div>
+    <button class="chip temp on" id="heatmapToggle" data-tooltip="Sunlight penetration from the surface. Fades exponentially with depth."><span class="material-symbols-outlined">light_mode</span>Light</button>
+    <button class="chip overlay on" id="overlayToggle" data-tooltip="Bioluminescent organisms producing their own light. Peaks in the twilight zone."><span class="material-symbols-outlined">blur_on</span>Bio</button>
+    <button class="chip overlay" id="migrationToggle" data-tooltip="Diel vertical migration: organisms rise at night to feed and descend at dawn."><span class="material-symbols-outlined">swap_vert</span>Migration</button>
+    <button class="chip temp" id="sofarToggle" data-tooltip="SOFAR sound channel: a depth where sound speed is slowest, trapping whale calls for thousands of km."><span class="material-symbols-outlined">graphic_eq</span>Sound</button>
+    <div class="btn-group" id="modeToggle">
+      <button class="gbtn on" data-mode="tropical" data-tooltip="Warm equatorial waters. Strong stratification, high biodiversity, sharp thermocline.">Tropical</button>
+      <button class="gbtn" data-mode="polar" data-tooltip="Arctic and Antarctic waters. Near-freezing, weak thermocline, high dissolved oxygen.">Polar</button>
+      <button class="gbtn" data-mode="upwelling" data-tooltip="Coastal zones where deep nutrient-rich water rises to the surface. Extremely productive.">Upwelling</button>
+      <button class="gbtn" data-mode="ventField" data-tooltip="Hydrothermal vent ecosystems powered by chemical energy from Earth's interior.">Vent Field</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legendBar" style="animation: rise 800ms ease-in-out both; animation-delay: 400ms;">
+    <div class="legend-item" data-legend="light" data-tooltip="Light penetration gradient from surface. UV and visible light attenuate exponentially with depth."><div class="legend-dot" style="background:#FFD700"></div>Light Gradient</div>
+    <div class="legend-item" data-legend="thermocline" data-tooltip="The thermocline is a steep temperature gradient between the warm mixed layer and the cold deep ocean."><div class="legend-dot" style="background:transparent; border:1px dashed rgba(255,100,50,0.5); box-sizing:border-box"></div>Thermocline</div>
+    <div class="legend-item" data-legend="currents" data-tooltip="Horizontal ocean currents driven by wind, thermohaline circulation, and Coriolis forces."><div class="legend-dot" style="background:#4ECDC4"></div>Currents</div>
+    <div class="legend-item" data-legend="biolum" data-tooltip="Bioluminescence produced by organisms. Most intense in the mesopelagic twilight zone (200-1000m)."><div class="legend-dot" style="background:#00FF88"></div>Bioluminescence</div>
+    <div class="legend-item" data-legend="snow" data-tooltip="Marine snow: organic particles drifting downward. The biological pump transporting carbon to the deep."><div class="legend-dot" style="background:rgba(200,220,255,0.6)"></div>Marine Snow</div>
+    <div class="legend-item" data-legend="pressure" data-tooltip="Hydrostatic pressure increases linearly with depth. Crushes gas-filled structures and shapes deep-sea adaptations."><div class="legend-dot" style="background:rgba(20,40,80,0.5)"></div>Pressure</div>
+    <div class="legend-item" data-legend="migration" data-tooltip="Diel vertical migration: billions of organisms rise to feed at night and descend at dawn. The largest animal migration on Earth."><div class="legend-dot" style="background:rgba(180,140,255,0.6)"></div>Migration</div>
+    <div class="legend-item" data-legend="sofar" data-tooltip="SOFAR sound channel: sound speed minimum near 1,000m creates a waveguide where whale calls travel thousands of kilometers."><div class="legend-dot" style="background:rgba(255,200,100,0.6)"></div>Sound Channel</div>
+    <div class="legend-item" data-legend="zones" data-tooltip="Five depth zones from surface to trench. Each contains distinct ecological communities. Hover to explore." style="margin-left:4px; padding-left:12px; border-left:1px solid var(--border)"><div class="legend-dot" style="background:rgba(74,156,200,0.12); border:0.5px solid rgba(74,156,200,0.2)"></div>Zones</div>
+    <div class="ambiance-btn">
+      <button class="cap-btn" id="ambianceBtn"><span class="material-symbols-outlined">music_note</span>Ambient Sound</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+var state = {
+  currentLevel: 1, targetLevel: 1,
+  showHeatmap: true, showOverlay: true, showMigration: false, showSofar: false, tourRecords: null,
+  migrationTime: 0, isNight: false,
+  flowPulse: 0, overlayPhase: 0,
+  isDark: true,
+  palette: 'abyss',
+  hoveredPhase: 0,
+  highlightedLayer: null,
+  mouseX: 0, mouseY: 0,
+  colLeft: 0, colTop: 0, colW: 0, colH: 0,
+  activeMode: 'tropical',
+  animDepth1: 200, animDepth2: 1000, animDepth3: 4000, animDepth4: 6000, animDepth5: 11000
+};
+
+// ============================================================
+// COLOR PALETTES
+// ============================================================
+var PALETTES = {
+  abyss: {
+    label: 'Abyss', dot: '#1a3a5c',
+    css: {
+      dark: {
+        bg: '#060d14', surface: '#0c1820', 'surface-hover': '#142430',
+        text: '#d0dce8', 'text-secondary': '#7a9ab8', 'text-muted': '#4a6a84',
+        border: 'rgba(100,160,220,0.10)', 'border-hover': 'rgba(100,160,220,0.20)',
+        primary: '#4A9CC8', secondary: '#4ECDC4', 'secondary-muted': 'rgba(78,205,196,0.08)',
+        tertiary: '#3A7CA5', 'tertiary-muted': 'rgba(58,124,165,0.06)',
+        'tooltip-bg': '#d0dce8', 'tooltip-text': '#060d14',
+        'dot-color': 'rgba(100,160,220,0.03)'
+      },
+      light: {
+        bg: '#f0f6fa', surface: '#e4eef5', 'surface-hover': '#d8e4ee',
+        text: '#0c1a2a', 'text-secondary': '#3a5a78', 'text-muted': '#5a7a98',
+        border: 'rgba(26,58,92,0.15)', 'border-hover': 'rgba(26,58,92,0.28)',
+        primary: '#1A6B8A', secondary: '#2A9D8F', 'secondary-muted': 'rgba(42,157,143,0.08)',
+        tertiary: '#264653', 'tertiary-muted': 'rgba(38,70,83,0.08)',
+        'tooltip-bg': '#0c1a2a', 'tooltip-text': '#f0f6fa',
+        'dot-color': 'rgba(26,58,92,0.05)'
+      }
+    },
+    canvas: {
+      dark: { bg: [6,13,20], dot: [74,156,200], primary: [74,156,200], pathway: [78,205,196], heat: [255,215,0], density: [20,40,80], overlay: [0,230,136], neutral: [160,180,200] },
+      light: { bg: [240,246,250], dot: [26,107,138], primary: [26,107,138], pathway: [42,157,143], heat: [200,160,0], density: [40,60,100], overlay: [0,180,100], neutral: [80,100,120] }
+    },
+    three: {
+      dark: {
+        baseColors: [0x1a5a8a, 0x0e3a5c, 0x082040, 0x04162e, 0x020c1a],
+        saturatedColors: [0x3a8ac0, 0x1e5a8c, 0x103860, 0x0a2640, 0x061428],
+        grid: 0x4A9CC8, crema: 0x00E5A0, cremaEmissive: 0x005530, tube: 0x4ECDC4,
+        glowColors: [0x001133, 0x000a22, 0x000611, 0x000308, 0x000104],
+        wireHighlight: 0x80C8F0
+      },
+      light: {
+        baseColors: [0x3a8ab8, 0x1a6a8a, 0x104a60, 0x083040, 0x041828],
+        saturatedColors: [0x5aaad8, 0x3a8aaa, 0x206a80, 0x104a60, 0x083040],
+        grid: 0x1A6B8A, crema: 0x00B880, cremaEmissive: 0x004420, tube: 0x2A9D8F,
+        glowColors: [0x000822, 0x000511, 0x000308, 0x000204, 0x000102],
+        wireHighlight: 0x60A0C8
+      }
+    }
+  },
+  bioluminescent: {
+    label: 'Bioluminescent', dot: '#00e5a0',
+    css: {
+      dark: {
+        bg: '#040e0c', surface: '#081a16', 'surface-hover': '#0e261e',
+        text: '#c8f0e0', 'text-secondary': '#60c8a0', 'text-muted': '#408868',
+        border: 'rgba(0,229,160,0.12)', 'border-hover': 'rgba(0,229,160,0.22)',
+        primary: '#00E5A0', secondary: '#00CCFF', 'secondary-muted': 'rgba(0,204,255,0.08)',
+        tertiary: '#00AA77', 'tertiary-muted': 'rgba(0,170,119,0.06)',
+        'tooltip-bg': '#c8f0e0', 'tooltip-text': '#040e0c',
+        'dot-color': 'rgba(0,229,160,0.03)'
+      },
+      light: {
+        bg: '#f0faf6', surface: '#e0f4ec', 'surface-hover': '#d0eee2',
+        text: '#0a2a1e', 'text-secondary': '#1a6a4a', 'text-muted': '#408868',
+        border: 'rgba(0,170,119,0.15)', 'border-hover': 'rgba(0,170,119,0.28)',
+        primary: '#00AA77', secondary: '#0099CC', 'secondary-muted': 'rgba(0,153,204,0.08)',
+        tertiary: '#008855', 'tertiary-muted': 'rgba(0,136,85,0.08)',
+        'tooltip-bg': '#0a2a1e', 'tooltip-text': '#f0faf6',
+        'dot-color': 'rgba(0,170,119,0.05)'
+      }
+    },
+    canvas: {
+      dark: { bg: [4,14,12], dot: [0,229,160], primary: [0,229,160], pathway: [0,204,255], heat: [0,255,200], density: [0,60,40], overlay: [0,255,136], neutral: [160,200,190] },
+      light: { bg: [240,250,246], dot: [0,170,119], primary: [0,170,119], pathway: [0,153,204], heat: [0,200,150], density: [0,80,50], overlay: [0,200,100], neutral: [80,120,110] }
+    },
+    three: {
+      dark: {
+        baseColors: [0x00aa77, 0x007755, 0x005540, 0x003a2a, 0x002018],
+        saturatedColors: [0x00cc99, 0x009977, 0x007755, 0x005540, 0x003328],
+        grid: 0x00E5A0, crema: 0x00FFCC, cremaEmissive: 0x006633, tube: 0x00CCFF,
+        glowColors: [0x001a0e, 0x001108, 0x000a05, 0x000503, 0x000201],
+        wireHighlight: 0x40FFB8
+      },
+      light: {
+        baseColors: [0x009966, 0x006644, 0x004430, 0x002a1e, 0x001810],
+        saturatedColors: [0x00bb88, 0x008866, 0x006644, 0x004430, 0x002a1e],
+        grid: 0x00AA77, crema: 0x00CC99, cremaEmissive: 0x004422, tube: 0x0099CC,
+        glowColors: [0x001108, 0x000a05, 0x000603, 0x000301, 0x000100],
+        wireHighlight: 0x30CC88
+      }
+    }
+  },
+  thermal: {
+    label: 'Thermal', dot: '#ff6633',
+    css: {
+      dark: {
+        bg: '#140806', surface: '#1e1008', 'surface-hover': '#2a180c',
+        text: '#f4e0d0', 'text-secondary': '#d09060', 'text-muted': '#a06030',
+        border: 'rgba(255,102,51,0.15)', 'border-hover': 'rgba(255,102,51,0.28)',
+        primary: '#FF6633', secondary: '#FF9900', 'secondary-muted': 'rgba(255,153,0,0.08)',
+        tertiary: '#CC4422', 'tertiary-muted': 'rgba(204,68,34,0.06)',
+        'tooltip-bg': '#f4e0d0', 'tooltip-text': '#140806',
+        'dot-color': 'rgba(255,102,51,0.03)'
+      },
+      light: {
+        bg: '#fef5f0', surface: '#f8e8dd', 'surface-hover': '#f0dcd0',
+        text: '#2a0a04', 'text-secondary': '#803010', 'text-muted': '#a06030',
+        border: 'rgba(204,68,34,0.18)', 'border-hover': 'rgba(204,68,34,0.30)',
+        primary: '#CC4422', secondary: '#CC7700', 'secondary-muted': 'rgba(204,119,0,0.08)',
+        tertiary: '#993311', 'tertiary-muted': 'rgba(153,51,17,0.08)',
+        'tooltip-bg': '#2a0a04', 'tooltip-text': '#fef5f0',
+        'dot-color': 'rgba(204,68,34,0.05)'
+      }
+    },
+    canvas: {
+      dark: { bg: [20,8,6], dot: [255,102,51], primary: [255,102,51], pathway: [255,153,0], heat: [255,80,30], density: [100,30,10], overlay: [255,200,50], neutral: [200,180,170] },
+      light: { bg: [254,245,240], dot: [204,68,34], primary: [204,68,34], pathway: [204,119,0], heat: [200,60,20], density: [80,20,5], overlay: [200,150,30], neutral: [120,100,90] }
+    },
+    three: {
+      dark: {
+        baseColors: [0xff6633, 0xcc4422, 0x992200, 0x661100, 0x440800],
+        saturatedColors: [0xff8855, 0xdd5533, 0xaa3311, 0x882200, 0x551100],
+        grid: 0xFF6633, crema: 0xFFAA33, cremaEmissive: 0x804400, tube: 0xFF9900,
+        glowColors: [0x330800, 0x220400, 0x150200, 0x0a0100, 0x050000],
+        wireHighlight: 0xFF9966
+      },
+      light: {
+        baseColors: [0xcc4422, 0x993311, 0x772200, 0x551100, 0x330800],
+        saturatedColors: [0xdd5533, 0xaa4422, 0x883311, 0x662200, 0x441100],
+        grid: 0xCC4422, crema: 0xCC8822, cremaEmissive: 0x603300, tube: 0xCC7700,
+        glowColors: [0x220400, 0x150200, 0x0a0100, 0x050000, 0x020000],
+        wireHighlight: 0xCC6644
+      }
+    }
+  },
+  arctic: {
+    label: 'Arctic', dot: '#a0d8ef',
+    css: {
+      dark: {
+        bg: '#080e14', surface: '#0e1820', 'surface-hover': '#14222e',
+        text: '#d8e8f4', 'text-secondary': '#90b8d4', 'text-muted': '#5888a8',
+        border: 'rgba(160,216,239,0.12)', 'border-hover': 'rgba(160,216,239,0.22)',
+        primary: '#A0D8EF', secondary: '#70C0E0', 'secondary-muted': 'rgba(112,192,224,0.08)',
+        tertiary: '#5AA0C0', 'tertiary-muted': 'rgba(90,160,192,0.06)',
+        'tooltip-bg': '#d8e8f4', 'tooltip-text': '#080e14',
+        'dot-color': 'rgba(160,216,239,0.03)'
+      },
+      light: {
+        bg: '#f4f8fc', surface: '#e8f0f6', 'surface-hover': '#dce8f0',
+        text: '#0a1a2a', 'text-secondary': '#3a6080', 'text-muted': '#5888a8',
+        border: 'rgba(90,160,192,0.15)', 'border-hover': 'rgba(90,160,192,0.28)',
+        primary: '#4088A8', secondary: '#3080A0', 'secondary-muted': 'rgba(48,128,160,0.08)',
+        tertiary: '#286888', 'tertiary-muted': 'rgba(40,104,136,0.08)',
+        'tooltip-bg': '#0a1a2a', 'tooltip-text': '#f4f8fc',
+        'dot-color': 'rgba(90,160,192,0.05)'
+      }
+    },
+    canvas: {
+      dark: { bg: [8,14,20], dot: [160,216,239], primary: [160,216,239], pathway: [112,192,224], heat: [180,220,240], density: [30,50,70], overlay: [120,240,200], neutral: [180,200,220] },
+      light: { bg: [244,248,252], dot: [64,136,168], primary: [64,136,168], pathway: [48,128,160], heat: [120,170,200], density: [20,40,60], overlay: [80,180,150], neutral: [80,100,130] }
+    },
+    three: {
+      dark: {
+        baseColors: [0x6ab8d8, 0x4a98b8, 0x2a7898, 0x1a5878, 0x0a3858],
+        saturatedColors: [0x8ad8f0, 0x6ab8d8, 0x4a98b8, 0x2a7898, 0x1a5878],
+        grid: 0xA0D8EF, crema: 0x80F0D0, cremaEmissive: 0x205840, tube: 0x70C0E0,
+        glowColors: [0x001a28, 0x001018, 0x000a10, 0x000508, 0x000204],
+        wireHighlight: 0xC0E8FF
+      },
+      light: {
+        baseColors: [0x4a98b8, 0x2a7898, 0x1a5878, 0x0a3858, 0x042038],
+        saturatedColors: [0x6ab8d8, 0x4a98b8, 0x2a7898, 0x1a5878, 0x0a3858],
+        grid: 0x4088A8, crema: 0x50C0A0, cremaEmissive: 0x184430, tube: 0x3080A0,
+        glowColors: [0x001018, 0x000810, 0x000508, 0x000304, 0x000102],
+        wireHighlight: 0x80B8D8
+      }
+    }
+  },
+  coral: {
+    label: 'Coral', dot: '#ff7f7f',
+    css: {
+      dark: {
+        bg: '#120808', surface: '#1e100e', 'surface-hover': '#2a1812',
+        text: '#f4e0dc', 'text-secondary': '#d08880', 'text-muted': '#a06058',
+        border: 'rgba(255,127,127,0.15)', 'border-hover': 'rgba(255,127,127,0.28)',
+        primary: '#FF7F7F', secondary: '#FFB366', 'secondary-muted': 'rgba(255,179,102,0.08)',
+        tertiary: '#CC5555', 'tertiary-muted': 'rgba(204,85,85,0.06)',
+        'tooltip-bg': '#f4e0dc', 'tooltip-text': '#120808',
+        'dot-color': 'rgba(255,127,127,0.03)'
+      },
+      light: {
+        bg: '#fef5f3', surface: '#f8e8e4', 'surface-hover': '#f0dcd6',
+        text: '#2a0808', 'text-secondary': '#804040', 'text-muted': '#a06058',
+        border: 'rgba(204,85,85,0.18)', 'border-hover': 'rgba(204,85,85,0.30)',
+        primary: '#CC5555', secondary: '#CC8844', 'secondary-muted': 'rgba(204,136,68,0.08)',
+        tertiary: '#993333', 'tertiary-muted': 'rgba(153,51,51,0.08)',
+        'tooltip-bg': '#2a0808', 'tooltip-text': '#fef5f3',
+        'dot-color': 'rgba(204,85,85,0.05)'
+      }
+    },
+    canvas: {
+      dark: { bg: [18,8,8], dot: [255,127,127], primary: [255,127,127], pathway: [255,179,102], heat: [255,100,100], density: [80,30,30], overlay: [255,200,120], neutral: [200,180,180] },
+      light: { bg: [254,245,243], dot: [204,85,85], primary: [204,85,85], pathway: [204,136,68], heat: [200,70,70], density: [60,20,20], overlay: [200,150,80], neutral: [120,100,100] }
+    },
+    three: {
+      dark: {
+        baseColors: [0xff7f7f, 0xcc5555, 0x993333, 0x662222, 0x441111],
+        saturatedColors: [0xff9999, 0xdd6666, 0xaa4444, 0x883333, 0x552222],
+        grid: 0xFF7F7F, crema: 0xFFCC77, cremaEmissive: 0x805530, tube: 0xFFB366,
+        glowColors: [0x330808, 0x220404, 0x150202, 0x0a0101, 0x050000],
+        wireHighlight: 0xFFAAAA
+      },
+      light: {
+        baseColors: [0xcc5555, 0x993333, 0x772222, 0x551111, 0x330808],
+        saturatedColors: [0xdd6666, 0xaa4444, 0x883333, 0x662222, 0x441111],
+        grid: 0xCC5555, crema: 0xCC9955, cremaEmissive: 0x604420, tube: 0xCC8844,
+        glowColors: [0x220404, 0x150202, 0x0a0101, 0x050000, 0x020000],
+        wireHighlight: 0xCC7777
+      }
+    }
+  }
+};
+
+// 5-zone boundaries as fractions of column height
+// zone1=Epipelagic, zone2=Mesopelagic, zone3=Bathypelagic, zone4=Abyssopelagic, zone5=Hadopelagic
+var levelConfigs = {
+  0: { zone1End: 0.30, zone2End: 0.50, zone3End: 0.70, zone4End: 0.85, zone5End: 1.00, currentStrength: 0.80, snowDensity: 0.20 },
+  1: { zone1End: 0.18, zone2End: 0.36, zone3End: 0.60, zone4End: 0.82, zone5End: 1.00, currentStrength: 0.50, snowDensity: 0.45 },
+  2: { zone1End: 0.08, zone2End: 0.20, zone3End: 0.45, zone4End: 0.75, zone5End: 1.00, currentStrength: 0.25, snowDensity: 0.70 },
+  3: { zone1End: 0.04, zone2End: 0.12, zone3End: 0.30, zone4End: 0.60, zone5End: 1.00, currentStrength: 0.12, snowDensity: 0.90 }
+};
+
+var currentLines = [
+  { depthFrac: 0.05, speed: 1.2, width: 1.5 },
+  { depthFrac: 0.15, speed: 0.8, width: 1.2 },
+  { depthFrac: 0.35, speed: 0.4, width: 1.0 },
+  { depthFrac: 0.55, speed: 0.2, width: 0.8 },
+  { depthFrac: 0.80, speed: 0.08, width: 0.6 }
+];
+
+var modeConfigs = {
+  tropical: {
+    temp: '26\u00b0C', pressure: '1 atm', light: '100%', o2: '6.4 ml/L', salinity: '35.0 psu',
+    tempNum: 26, pressureNum: 1,
+    depth1: 200, depth2: 1000, depth3: 4000, depth4: 6000, depth5: 11000,
+    zoneNames: ['Epipelagic', 'Mesopelagic', 'Bathypelagic', 'Abyssopelagic', 'Hadopelagic'],
+    phaseInfo: {
+      1: {
+        title: 'Epipelagic \u2014 Sunlight Zone',
+        range: '0\u2013200m depth',
+        items: [
+          'Abundant sunlight drives photosynthesis',
+          'Warmest water temperatures (20\u201328\u00b0C)',
+          'Highest biodiversity and productivity',
+          'Phytoplankton produce 50% of Earth\u2019s oxygen',
+          'Coral reefs and pelagic fish thrive here'
+        ],
+        note: 'The engine of ocean life \u2014 nearly all primary production occurs in this thin layer'
+      },
+      2: {
+        title: 'Mesopelagic \u2014 Twilight Zone',
+        range: '200\u20131,000m depth',
+        items: [
+          'Dim light insufficient for photosynthesis',
+          'Oxygen minimum zone (OMZ) at 200\u2013800m',
+          'Massive daily vertical migration of organisms',
+          'Bioluminescence peaks in this zone',
+          'Temperature drops through the permanent thermocline'
+        ],
+        note: 'Home to the largest animal migration on Earth \u2014 billions of organisms rise nightly to feed'
+      },
+      3: {
+        title: 'Bathypelagic \u2014 Midnight Zone',
+        range: '1,000\u20134,000m depth',
+        items: [
+          'Total darkness \u2014 no sunlight penetrates',
+          'Near-freezing temperatures (2\u20134\u00b0C)',
+          'Organisms rely on marine snow and predation',
+          'Giant squid and deep-sea fish adapted to pressure',
+          'Sparse but specialized communities'
+        ],
+        note: 'The vast dark interior \u2014 life here depends entirely on what falls from above'
+      },
+      4: {
+        title: 'Abyssopelagic \u2014 Abyssal Zone',
+        range: '4,000\u20136,000m depth',
+        items: [
+          'Extreme pressure (400\u2013600 atm)',
+          'Near-constant temperature (~1.5\u00b0C)',
+          'Abyssal plains cover 65% of the seafloor',
+          'Hydrothermal vents support chemosynthetic life',
+          'Extremely slow biological processes'
+        ],
+        note: 'The deep seafloor \u2014 seemingly barren but harboring unique extremophile ecosystems'
+      },
+      5: {
+        title: 'Hadopelagic \u2014 Hadal Zone',
+        range: '6,000\u201311,000m depth',
+        items: [
+          'Ocean trenches only \u2014 deepest points on Earth',
+          'Pressure exceeds 600\u20131,100 atm',
+          'Unique endemic species (hadal snailfish, amphipods)',
+          'Challenger Deep: 10,935m (Mariana Trench)',
+          'Active subduction zone geology'
+        ],
+        note: 'Earth\u2019s final frontier \u2014 fewer humans have visited than have walked on the Moon'
+      }
+    },
+    statTooltips: {
+      temp: 'Tropical surface temperature averages 26\u201328\u00b0C. Drops to ~1.5\u00b0C below the thermocline.',
+      pressure: 'Surface pressure is 1 atm. Increases by ~1 atm per 10m depth.',
+      light: 'Full sunlight at surface. 1% remains at 200m. Total darkness below 1,000m.',
+      o2: 'Dissolved oxygen at 6.4 ml/L. An oxygen minimum zone exists at 200\u20131,000m.',
+      salinity: 'Average tropical salinity of 35.0 psu. Higher due to evaporation.'
+    },
+    legendGradientTooltip: 'Sunlight penetration in warm tropical waters. Clear water allows deeper light penetration.',
+    defaultLevel: 1,
+    puck3d: { radius: 0.8, height: 4.0, screenRadius: 0.85, screenColor: 0x4488AA, screenOpacity: 0.30 }
+  },
+  polar: {
+    temp: '\u22121\u00b0C', pressure: '1 atm', light: '40%', o2: '7.8 ml/L', salinity: '33.5 psu',
+    tempNum: -1, pressureNum: 1,
+    depth1: 100, depth2: 500, depth3: 2000, depth4: 4000, depth5: 5500,
+    zoneNames: ['Epipelagic', 'Mesopelagic', 'Bathypelagic', 'Abyssopelagic', 'Hadopelagic'],
+    phaseInfo: {
+      1: {
+        title: 'Epipelagic \u2014 Polar Surface',
+        range: '0\u2013100m depth',
+        items: [
+          'Sea ice covers surface seasonally',
+          'Near-freezing temperatures (\u22121.8 to 2\u00b0C)',
+          'Extreme seasonal light variation (polar night/day)',
+          'Massive phytoplankton blooms in summer',
+          'Krill swarms support whales and penguins'
+        ],
+        note: 'Ice-edge blooms are among the most productive events in the ocean'
+      },
+      2: {
+        title: 'Mesopelagic \u2014 Polar Twilight',
+        range: '100\u2013500m depth',
+        items: [
+          'Cold dense water sinks from surface',
+          'Weak or absent thermocline',
+          'Higher oxygen due to cold water solubility',
+          'Antarctic Intermediate Water forms here',
+          'Less vertical migration than tropics'
+        ],
+        note: 'Polar deep water formation drives global thermohaline circulation'
+      },
+      3: {
+        title: 'Bathypelagic \u2014 Polar Deep',
+        range: '500\u20132,000m depth',
+        items: [
+          'Antarctic Bottom Water: densest ocean water',
+          'Temperature uniform near 0\u00b0C',
+          'High oxygen from recent surface contact',
+          'Slow deep western boundary currents',
+          'Ice-rafted debris reaches this depth'
+        ],
+        note: 'Cold polar deep water ventilates the global ocean floor'
+      },
+      4: {
+        title: 'Abyssopelagic \u2014 Polar Abyss',
+        range: '2,000\u20134,000m depth',
+        items: [
+          'Abyssal plain beneath polar seas',
+          'Temperature ~\u22120.5\u00b0C near Antarctic',
+          'Rich benthic communities around ice-sheet margins',
+          'Slow sedimentation from biogenic sources',
+          'Important carbon sequestration zone'
+        ],
+        note: 'The polar abyss stores centuries of accumulated atmospheric carbon'
+      },
+      5: {
+        title: 'Hadopelagic \u2014 Polar Trenches',
+        range: '4,000\u20135,500m depth',
+        items: [
+          'South Sandwich Trench: deepest in Southern Ocean',
+          'Limited trench depth compared to Pacific',
+          'Extreme cold combined with extreme pressure',
+          'Highly endemic amphipod communities',
+          'Virtually unexplored territory'
+        ],
+        note: 'Polar trenches remain among the least explored ecosystems on Earth'
+      }
+    },
+    statTooltips: {
+      temp: 'Polar surface water near \u22121\u00b0C. Little temperature change with depth.',
+      pressure: 'Surface pressure is 1 atm. Polar oceans are generally shallower.',
+      light: '40% due to low sun angle, ice cover, and seasonal darkness.',
+      o2: 'High dissolved oxygen (7.8 ml/L) \u2014 cold water holds more gas.',
+      salinity: 'Lower salinity (33.5 psu) from ice melt and freshwater input.'
+    },
+    legendGradientTooltip: 'Reduced light in polar waters due to low sun angle, ice cover, and seasonal polar night.',
+    defaultLevel: 2,
+    puck3d: { radius: 0.8, height: 3.2, screenRadius: 0.85, screenColor: 0x88BBCC, screenOpacity: 0.25 }
+  },
+  upwelling: {
+    temp: '15\u00b0C', pressure: '1 atm', light: '70%', o2: '5.2 ml/L', salinity: '34.5 psu',
+    tempNum: 15, pressureNum: 1,
+    depth1: 150, depth2: 800, depth3: 3000, depth4: 5000, depth5: 8000,
+    zoneNames: ['Epipelagic', 'Mesopelagic', 'Bathypelagic', 'Abyssopelagic', 'Hadopelagic'],
+    phaseInfo: {
+      1: {
+        title: 'Epipelagic \u2014 Upwelling Surface',
+        range: '0\u2013150m depth',
+        items: [
+          'Cold, nutrient-rich water reaches surface',
+          'Cooler than surrounding waters (12\u201318\u00b0C)',
+          'Extremely high primary productivity',
+          'Supports major fisheries (anchovies, sardines)',
+          'Coastal fog forms from cold surface water'
+        ],
+        note: 'Upwelling zones cover <1% of the ocean but support >50% of global fish catch'
+      },
+      2: {
+        title: 'Mesopelagic \u2014 Source Layer',
+        range: '150\u2013800m depth',
+        items: [
+          'Source of upwelled water',
+          'Intense oxygen minimum zone',
+          'Nutrient regeneration from decomposition',
+          'Phosphate and nitrate concentrations peak',
+          'Strong vertical mixing disrupts stratification'
+        ],
+        note: 'This is where the nutrient-rich water originates before being pulled to the surface'
+      },
+      3: {
+        title: 'Bathypelagic \u2014 Upwelling Deep',
+        range: '800\u20133,000m depth',
+        items: [
+          'Deep return flow completes the circulation',
+          'Organic material rains from productive surface',
+          'Enhanced biological pump efficiency',
+          'Relatively high deep-sea biomass',
+          'Carbon export stronger than oligotrophic regions'
+        ],
+        note: 'Upwelling systems drive an intensified biological pump'
+      },
+      4: {
+        title: 'Abyssopelagic \u2014 Upwelling Abyss',
+        range: '3,000\u20135,000m depth',
+        items: [
+          'Continental margin geology',
+          'Submarine canyons channel sediment flows',
+          'Turbidity currents reshape the seafloor',
+          'Rich benthic communities fed by enhanced export',
+          'Manganese nodule fields'
+        ],
+        note: 'Continental margins near upwelling zones harbor exceptional deep-sea biodiversity'
+      },
+      5: {
+        title: 'Hadopelagic \u2014 Margin Trench',
+        range: '5,000\u20138,000m depth',
+        items: [
+          'Peru-Chile Trench (Atacama Trench): 8,065m',
+          'Subduction zone tectonics',
+          'Organic-rich sediments from coastal productivity',
+          'Unique trench communities adapted to depth',
+          'Higher food supply than mid-ocean trenches'
+        ],
+        note: 'Trenches near upwelling coasts receive more food, supporting richer hadal communities'
+      }
+    },
+    statTooltips: {
+      temp: 'Cooled to 15\u00b0C by cold deep water reaching the surface.',
+      pressure: 'Surface pressure is 1 atm. Coastal shelves are relatively shallow.',
+      light: '70% \u2014 reduced by high plankton density and suspended particles.',
+      o2: 'Lower oxygen (5.2 ml/L) due to intense biological consumption.',
+      salinity: '34.5 psu \u2014 slightly lower from mixing with deep water.'
+    },
+    legendGradientTooltip: 'Light attenuated by high phytoplankton concentrations in nutrient-rich upwelled water.',
+    defaultLevel: 1,
+    puck3d: { radius: 0.8, height: 3.6, screenRadius: 0.85, screenColor: 0x669988, screenOpacity: 0.28 }
+  },
+  ventField: {
+    temp: '2\u00b0C', pressure: '250 atm', light: '0%', o2: '3.1 ml/L', salinity: '34.8 psu',
+    tempNum: 2, pressureNum: 250,
+    depth1: 200, depth2: 1000, depth3: 2500, depth4: 4000, depth5: 6500,
+    zoneNames: ['Epipelagic', 'Mesopelagic', 'Bathypelagic', 'Abyssopelagic', 'Hadopelagic'],
+    phaseInfo: {
+      1: {
+        title: 'Epipelagic \u2014 Surface Above Vent',
+        range: '0\u2013200m depth',
+        items: [
+          'Surface waters unaffected by deep vents',
+          'Normal photosynthetic primary production',
+          'No chemical signal from vents reaches surface',
+          'Standard tropical/temperate conditions',
+          'Plumes occasionally detected by satellites'
+        ],
+        note: 'The surface ocean above vent fields appears entirely normal'
+      },
+      2: {
+        title: 'Mesopelagic \u2014 Plume Dispersal',
+        range: '200\u20131,000m depth',
+        items: [
+          'Hydrothermal plumes spread laterally here',
+          'Dissolved metals (iron, manganese) enrich water',
+          'Chemosynthetic bacteria colonize plume particles',
+          'Elevated temperature anomalies detectable',
+          'Plume tracking used to discover new vent fields'
+        ],
+        note: 'Hydrothermal plumes act as chemical beacons, carrying deep vent signatures across ocean basins'
+      },
+      3: {
+        title: 'Bathypelagic \u2014 Vent Proximity',
+        range: '1,000\u20132,500m depth',
+        items: [
+          'Most active hydrothermal vent depth range',
+          'Black smokers emit 350\u2013400\u00b0C superheated fluid',
+          'Chemosynthetic ecosystems independent of sunlight',
+          'Giant tube worms, vent crabs, vent shrimp',
+          'Polymetallic sulfide deposits form chimneys'
+        ],
+        note: 'Life here is powered by chemical energy from Earth\u2019s interior, not the sun'
+      },
+      4: {
+        title: 'Abyssopelagic \u2014 Deep Vent Field',
+        range: '2,500\u20134,000m depth',
+        items: [
+          'Diffuse venting across broad areas',
+          'Lower temperature seeps (10\u201340\u00b0C)',
+          'Microbial mats carpet the seafloor',
+          'Unique mineral formations (anhydrite, barite)',
+          'Vent fauna succession and community dynamics'
+        ],
+        note: 'Diffuse venting supports different communities than focused black smokers'
+      },
+      5: {
+        title: 'Hadopelagic \u2014 Trench Venting',
+        range: '4,000\u20136,500m depth',
+        items: [
+          'Rare but confirmed vents in some trenches',
+          'Extreme pressure + extreme temperature gradients',
+          'Forearc serpentinite mud volcanoes',
+          'Unique hydrogen-based chemosynthesis',
+          'Mariana forearc hosts active serpentinite vents'
+        ],
+        note: 'Trench vents represent the most extreme habitable environment on Earth'
+      }
+    },
+    statTooltips: {
+      temp: 'Ambient deep water at 2\u00b0C. Vent fluids reach 350\u2013400\u00b0C.',
+      pressure: '250 atm at typical vent depth (~2,500m).',
+      light: '0% \u2014 total darkness. Only light is from incandescent vent fluid.',
+      o2: 'Low oxygen (3.1 ml/L) \u2014 consumed by chemosynthetic reactions.',
+      salinity: '34.8 psu \u2014 modified by vent fluid mixing.'
+    },
+    legendGradientTooltip: 'No solar light. The only illumination comes from superheated vent fluid and bioluminescence.',
+    defaultLevel: 2,
+    puck3d: { radius: 0.8, height: 3.4, screenRadius: 0.85, screenColor: 0x666666, screenOpacity: 0.20 }
+  }
+};
+
+// ============================================================
+// URL STATE ENCODING
+// ============================================================
+var urlDefaults = { level: 1, mode: 'tropical', heatmap: 1, overlay: 1, theme: 'dark', palette: 'abyss' };
+
+function loadStateFromURL() {
+  var p = new URLSearchParams(window.location.search);
+  if (p.has('level')) {
+    var g = parseInt(p.get('level'));
+    if (g >= 0 && g <= 3) {
+      state.targetLevel = g; state.currentLevel = g;
+      document.querySelectorAll('#levelGroup .gbtn').forEach(function(b) {
+        b.classList.toggle('on', parseInt(b.dataset.level) === g);
+      });
+    }
+  }
+  if (p.has('mode')) {
+    var mode = p.get('mode');
+    if (modeConfigs[mode]) {
+      var cfg = modeConfigs[mode];
+      state.activeMode = mode;
+      state.animDepth1 = cfg.depth1; state.animDepth2 = cfg.depth2;
+      state.animDepth3 = cfg.depth3; state.animDepth4 = cfg.depth4; state.animDepth5 = cfg.depth5;
+      document.querySelectorAll('#modeToggle .gbtn').forEach(function(b) {
+        b.classList.toggle('on', b.dataset.mode === mode);
+      });
+      document.getElementById('statTemp').textContent = cfg.temp;
+      document.getElementById('statPressure').textContent = cfg.pressure;
+      document.getElementById('statLight').textContent = cfg.light;
+      document.getElementById('statO2').textContent = cfg.o2;
+      document.getElementById('statSalinity').textContent = cfg.salinity;
+    }
+  }
+  if (p.has('heatmap')) {
+    var t = parseInt(p.get('heatmap'));
+    if (t === 0 || t === 1) { state.showHeatmap = !!t; document.getElementById('heatmapToggle').classList.toggle('on', state.showHeatmap); }
+  }
+  if (p.has('overlay')) {
+    var cr = parseInt(p.get('overlay'));
+    if (cr === 0 || cr === 1) { state.showOverlay = !!cr; document.getElementById('overlayToggle').classList.toggle('on', state.showOverlay); }
+  }
+  if (p.has('theme')) {
+    var th = p.get('theme');
+    if (th === 'dark' || th === 'light') {
+      state.isDark = th === 'dark';
+      document.documentElement.setAttribute('data-theme', th);
+      document.getElementById('themeIcon').textContent = state.isDark ? 'dark_mode' : 'light_mode';
+    }
+  }
+  if (p.has('palette')) {
+    var pal = p.get('palette');
+    if (PALETTES[pal]) state.palette = pal;
+  }
+  applyPalette();
+}
+
+function pushStateToURL() {
+  var params = new URLSearchParams();
+  if (state.targetLevel !== urlDefaults.level) params.set('level', state.targetLevel);
+  if (state.activeMode !== urlDefaults.mode) params.set('mode', state.activeMode);
+  if ((state.showHeatmap ? 1 : 0) !== urlDefaults.heatmap) params.set('heatmap', state.showHeatmap ? 1 : 0);
+  if ((state.showOverlay ? 1 : 0) !== urlDefaults.overlay) params.set('overlay', state.showOverlay ? 1 : 0);
+  var currentTheme = state.isDark ? 'dark' : 'light';
+  if (currentTheme !== urlDefaults.theme) params.set('theme', currentTheme);
+  if (state.palette !== urlDefaults.palette) params.set('palette', state.palette);
+  var qs = params.toString();
+  history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+}
+
+loadStateFromURL();
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+var themeToggle = document.getElementById('themeToggle');
+var themeIcon = document.getElementById('themeIcon');
+themeToggle.addEventListener('click', function() { setTheme(state.isDark ? 'light' : 'dark'); });
+function setTheme(t) {
+  state.isDark = t === 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  themeIcon.textContent = state.isDark ? 'dark_mode' : 'light_mode';
+  applyPalette(); updatePuck3DTheme(true); pushStateToURL();
+}
+
+document.getElementById('palettePicker').addEventListener('click', function(e) {
+  var dot = e.target.closest('.palette-dot');
+  if (!dot) return;
+  state.palette = dot.dataset.palette;
+  applyPalette(); updatePuck3DTheme(true); pushStateToURL();
+});
+
+document.getElementById('levelGroup').addEventListener('click', function(e) {
+  var btn = e.target.closest('.gbtn');
+  if (!btn) return;
+  state.targetLevel = parseInt(btn.dataset.level);
+  document.querySelectorAll('#levelGroup .gbtn').forEach(function(b) { b.classList.remove('on'); });
+  btn.classList.add('on'); pushStateToURL();
+});
+document.getElementById('heatmapToggle').addEventListener('click', function() {
+  state.showHeatmap = !state.showHeatmap; this.classList.toggle('on'); pushStateToURL();
+});
+document.getElementById('overlayToggle').addEventListener('click', function() {
+  state.showOverlay = !state.showOverlay; this.classList.toggle('on'); pushStateToURL();
+});
+document.getElementById('migrationToggle').addEventListener('click', function() {
+  state.showMigration = !state.showMigration; this.classList.toggle('on');
+});
+document.getElementById('sofarToggle').addEventListener('click', function() {
+  state.showSofar = !state.showSofar; this.classList.toggle('on');
+});
+
+var activeStatAnimations = {};
+function animateStatValue(element, fromVal, toVal, prefix, suffix, duration, decimals) {
+  var id = element.id || element.textContent;
+  if (activeStatAnimations[id]) activeStatAnimations[id].cancelled = true;
+  var from = parseFloat(fromVal); var to = parseFloat(toVal);
+  decimals = decimals || 0;
+  if (isNaN(from) || isNaN(to) || from === to) {
+    element.textContent = prefix + (decimals > 0 ? to.toFixed(decimals) : to) + suffix; return;
+  }
+  var handle = { cancelled: false };
+  activeStatAnimations[id] = handle;
+  var startTime = null;
+  function easeOutQuart(t) { return 1 - Math.pow(1 - t, 4); }
+  function tick(ts) {
+    if (handle.cancelled) return;
+    if (!startTime) startTime = ts;
+    var elapsed = ts - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    var current = from + (to - from) * easeOutQuart(progress);
+    element.textContent = prefix + current.toFixed(decimals) + suffix;
+    if (progress < 1) requestAnimationFrame(tick);
+    else delete activeStatAnimations[id];
+  }
+  requestAnimationFrame(tick);
+}
+
+document.getElementById('modeToggle').addEventListener('click', function(e) {
+  var btn = e.target.closest('.gbtn');
+  if (!btn) return;
+  var mode = btn.dataset.mode;
+  if (mode === state.activeMode) return;
+  var oldCfg = modeConfigs[state.activeMode];
+  var newCfg = modeConfigs[mode];
+  state.activeMode = mode;
+  document.querySelectorAll('#modeToggle .gbtn').forEach(function(b) { b.classList.remove('on'); });
+  btn.classList.add('on');
+  var recommendedLevel = newCfg.defaultLevel;
+  state.targetLevel = recommendedLevel;
+  document.querySelectorAll('#levelGroup .gbtn').forEach(function(b) {
+    b.classList.toggle('on', parseInt(b.dataset.level) === recommendedLevel);
+  });
+  var duration = 1200;
+  animateStatValue(document.getElementById('statTemp'), oldCfg.tempNum, newCfg.tempNum, '', '\u00b0C', duration, 0);
+  animateStatValue(document.getElementById('statPressure'), oldCfg.pressureNum, newCfg.pressureNum, '', ' atm', duration, 0);
+  document.getElementById('statLight').textContent = newCfg.light;
+  document.getElementById('statO2').textContent = newCfg.o2;
+  document.getElementById('statSalinity').textContent = newCfg.salinity;
+  document.getElementById('statTempPill').setAttribute('data-tooltip', newCfg.statTooltips.temp);
+  document.getElementById('statPressurePill').setAttribute('data-tooltip', newCfg.statTooltips.pressure);
+  document.getElementById('statLightPill').setAttribute('data-tooltip', newCfg.statTooltips.light);
+  document.getElementById('statO2Pill').setAttribute('data-tooltip', newCfg.statTooltips.o2);
+  document.getElementById('statSalinityPill').setAttribute('data-tooltip', newCfg.statTooltips.salinity);
+  var gradientLegend = document.querySelector('[data-legend="light"]');
+  if (gradientLegend) gradientLegend.setAttribute('data-tooltip', newCfg.legendGradientTooltip);
+  pushStateToURL();
+});
+
+var tooltipEl = document.getElementById('tooltip');
+var ttTimeout;
+document.querySelectorAll('[data-tooltip]').forEach(function(el) {
+  el.addEventListener('mouseenter', function() {
+    tooltipEl.textContent = el.dataset.tooltip;
+    ttTimeout = setTimeout(function() {
+      var r = el.getBoundingClientRect();
+      var tw = 260;
+      var left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+      var showAbove = el.dataset.legend || el.closest('.controls');
+      if (showAbove) {
+        tooltipEl.style.top = (r.top - 10) + 'px'; tooltipEl.style.transform = 'translateY(-100%)';
+      } else {
+        tooltipEl.style.top = (r.bottom + 10) + 'px'; tooltipEl.style.transform = '';
+      }
+      tooltipEl.style.left = left + 'px'; tooltipEl.classList.add('visible');
+    }, 300);
+  });
+  el.addEventListener('mouseleave', function() {
+    clearTimeout(ttTimeout); tooltipEl.classList.remove('visible'); tooltipEl.style.transform = '';
+  });
+});
+
+var legendItems = document.querySelectorAll('[data-legend]');
+legendItems.forEach(function(el) {
+  el.addEventListener('mouseenter', function() {
+    if (tour.active) return;
+    state.highlightedLayer = el.dataset.legend;
+    legendItems.forEach(function(other) { if (other !== el) other.classList.add('dimmed'); });
+  });
+  el.addEventListener('mouseleave', function() {
+    if (tour.active) return;
+    state.highlightedLayer = null;
+    legendItems.forEach(function(other) { other.classList.remove('dimmed'); });
+  });
+});
+
+// ============================================================
+// CANVAS SETUP & MOUSE INTERACTION
+// ============================================================
+var canvas = document.getElementById('extraction');
+var ctx = canvas.getContext('2d');
+var container = document.getElementById('canvasContainer');
+var phaseTooltipEl = document.getElementById('phaseTooltip');
+
+canvas.addEventListener('mousemove', function(e) {
+  if (tour.active) return;
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.clientX - rect.left;
+  var my = e.clientY - rect.top;
+  state.mouseX = e.clientX; state.mouseY = e.clientY;
+
+  // Vertical column hit detection
+  var colL = state.colLeft, colT = state.colTop, colW = state.colW, colH = state.colH;
+  var phase = 0;
+  if (mx >= colL && mx <= colL + colW && my >= colT && my <= colT + colH) {
+    var frac = (my - colT) / colH;
+    var gv = getLevelValues(state.currentLevel);
+    if (frac <= gv.zone1End) phase = 1;
+    else if (frac <= gv.zone2End) phase = 2;
+    else if (frac <= gv.zone3End) phase = 3;
+    else if (frac <= gv.zone4End) phase = 4;
+    else phase = 5;
+  }
+
+  if (phase !== state.hoveredPhase) {
+    state.hoveredPhase = phase;
+    if (phase > 0) {
+      var info = modeConfigs[state.activeMode].phaseInfo[phase];
+      var html = '<div class="zt-title">' + info.title + '</div>';
+      html += '<div class="zt-range">' + info.range + '</div>';
+      info.items.forEach(function(item) { html += '<div class="zt-item">' + item + '</div>'; });
+      html += '<div class="zt-res">' + info.note + '</div>';
+      phaseTooltipEl.innerHTML = html;
+      var contRect = container.getBoundingClientRect();
+      var tipX = e.clientX - contRect.left + 16;
+      var tipY = e.clientY - contRect.top - 20;
+      if (tipX + 310 > contRect.width) tipX = e.clientX - contRect.left - 320;
+      if (tipY < 0) tipY = 10;
+      if (tipY + 250 > contRect.height) tipY = contRect.height - 260;
+      phaseTooltipEl.style.left = tipX + 'px'; phaseTooltipEl.style.top = tipY + 'px';
+      phaseTooltipEl.classList.add('visible');
+    } else {
+      phaseTooltipEl.classList.remove('visible');
+    }
+  } else if (phase > 0) {
+    var contRect = container.getBoundingClientRect();
+    var tipX = e.clientX - contRect.left + 16;
+    var tipY = e.clientY - contRect.top - 20;
+    if (tipX + 310 > contRect.width) tipX = e.clientX - contRect.left - 320;
+    if (tipY < 0) tipY = 10;
+    if (tipY + 250 > contRect.height) tipY = contRect.height - 260;
+    phaseTooltipEl.style.left = tipX + 'px'; phaseTooltipEl.style.top = tipY + 'px';
+  }
+});
+
+canvas.addEventListener('mouseleave', function() {
+  state.hoveredPhase = 0; phaseTooltipEl.classList.remove('visible');
+});
+
+var iconReady = false;
+var iconFont = new FontFace('Material Symbols Outlined',
+  "url(https://fonts.gstatic.com/s/materialsymbolsoutlined/v252/kJEhBvYX7BgnkSrUwT8OhrdQw4oELdPIeeII9v6oFsI.woff2)");
+iconFont.load().then(function(f) { document.fonts.add(f); iconReady = true; }).catch(function(){});
+
+function resize() {
+  var rect = container.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function tc(token, alpha) {
+  var rgb = PALETTES[state.palette].canvas[state.isDark ? 'dark' : 'light'][token];
+  return alpha !== undefined
+    ? 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + alpha + ')'
+    : 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+}
+
+function t3(key) {
+  return PALETTES[state.palette].three[state.isDark ? 'dark' : 'light'][key];
+}
+
+function applyPalette() {
+  var vars = PALETTES[state.palette].css[state.isDark ? 'dark' : 'light'];
+  var root = document.documentElement;
+  Object.keys(vars).forEach(function(k) { root.style.setProperty('--' + k, vars[k]); });
+  document.querySelectorAll('.palette-dot').forEach(function(d) {
+    d.classList.toggle('active', d.dataset.palette === state.palette);
+  });
+}
+
+function getLevelValues(levelVal) {
+  var low = Math.floor(Math.max(0, Math.min(levelVal, 3)));
+  var high = Math.min(low + 1, 3);
+  var t = levelVal - low;
+  var cL = levelConfigs[low]; var cH = levelConfigs[high];
+  return {
+    zone1End: lerp(cL.zone1End, cH.zone1End, t),
+    zone2End: lerp(cL.zone2End, cH.zone2End, t),
+    zone3End: lerp(cL.zone3End, cH.zone3End, t),
+    zone4End: lerp(cL.zone4End, cH.zone4End, t),
+    zone5End: lerp(cL.zone5End, cH.zone5End, t),
+    currentStrength: lerp(cL.currentStrength, cH.currentStrength, t),
+    snowDensity: lerp(cL.snowDensity, cH.snowDensity, t)
+  };
+}
+
+function formatDepth(meters) {
+  if (meters >= 1000) return (meters / 1000).toFixed(1) + 'km';
+  return Math.round(meters) + 'm';
+}
+
+// Marine snow particles
+var snowParticles = [];
+for (var si = 0; si < 80; si++) {
+  snowParticles.push({
+    x: Math.random(), y: Math.random(),
+    size: 0.5 + Math.random() * 1.5,
+    speed: 0.0002 + Math.random() * 0.0004,
+    drift: (Math.random() - 0.5) * 0.0001,
+    opacity: 0.15 + Math.random() * 0.35
+  });
+}
+
+// Bioluminescence sparkle particles
+var bioParticles = [];
+for (var bi = 0; bi < 40; bi++) {
+  bioParticles.push({
+    x: Math.random(), y: 0.15 + Math.random() * 0.55,
+    phase: Math.random() * Math.PI * 2,
+    size: 1 + Math.random() * 2,
+    speed: 0.005 + Math.random() * 0.01
+  });
+}
+
+// Diel vertical migration organisms
+var migrationOrgs = [];
+for (var mi = 0; mi < 35; mi++) {
+  migrationOrgs.push({
+    x: 0.15 + Math.random() * 0.70,
+    dayY: 0.25 + Math.random() * 0.45,
+    nightY: 0.02 + Math.random() * 0.12,
+    currentY: 0.25 + Math.random() * 0.45,
+    size: 1.2 + Math.random() * 2.0,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.003 + Math.random() * 0.004
+  });
+}
+
+var drawTime = 0;
+
+// ============================================================
+// CANVAS DRAW LOOP — VERTICAL OCEAN COLUMN
+// ============================================================
+function draw() {
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w === 0 || h === 0) { requestAnimationFrame(draw); return; }
+
+  drawTime += 1/60;
+  var font = "'Karla', system-ui, sans-serif";
+
+  state.currentLevel = lerp(state.currentLevel, state.targetLevel, 0.06);
+  var cfg = modeConfigs[state.activeMode];
+  state.animDepth1 = lerp(state.animDepth1, cfg.depth1, 0.06);
+  state.animDepth2 = lerp(state.animDepth2, cfg.depth2, 0.06);
+  state.animDepth3 = lerp(state.animDepth3, cfg.depth3, 0.06);
+  state.animDepth4 = lerp(state.animDepth4, cfg.depth4, 0.06);
+  state.animDepth5 = lerp(state.animDepth5, cfg.depth5, 0.06);
+
+  // Column dimensions — centered vertical rectangle
+  var colW = Math.min(w * 0.42, 340);
+  var colH = h * 0.88;
+  var colL = (w - colW) / 2;
+  var colT = (h - colH) / 2;
+  state.colLeft = colL; state.colTop = colT; state.colW = colW; state.colH = colH;
+
+  var gv = getLevelValues(state.currentLevel);
+  var z1Y = colT + colH * gv.zone1End;
+  var z2Y = colT + colH * gv.zone2End;
+  var z3Y = colT + colH * gv.zone3End;
+  var z4Y = colT + colH * gv.zone4End;
+  var z5Y = colT + colH;
+
+  var hl = state.highlightedLayer;
+  function lA(layerName) { return !hl ? 1 : (hl === layerName ? 1 : 0.04); }
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Dot grid background
+  ctx.fillStyle = tc('dot', state.isDark ? 0.025 : 0.05);
+  for (var gx = 0; gx < w; gx += 32) {
+    for (var gy = 0; gy < h; gy += 32) {
+      ctx.beginPath(); ctx.arc(gx, gy, 0.5, 0, 6.28); ctx.fill();
+    }
+  }
+
+  // ============================================================
+  // ZONE FILLS — horizontal bands
+  // ============================================================
+  ctx.globalAlpha = lA('zones');
+  var hp = state.hoveredPhase;
+  var zoneBands = [
+    { top: colT, bottom: z1Y, num: 1 },
+    { top: z1Y, bottom: z2Y, num: 2 },
+    { top: z2Y, bottom: z3Y, num: 3 },
+    { top: z3Y, bottom: z4Y, num: 4 },
+    { top: z4Y, bottom: z5Y, num: 5 }
+  ];
+  var defaultAlphas = [0.06, 0.08, 0.10, 0.12, 0.14];
+  var hoverAlphas = [0.18, 0.20, 0.22, 0.24, 0.26];
+  var dimFill = tc('primary', 0.005);
+
+  zoneBands.forEach(function(band, i) {
+    var bh = band.bottom - band.top;
+    if (bh < 0.5) return;
+    ctx.fillStyle = hp === band.num ? tc('primary', hoverAlphas[i])
+                  : (hp > 0 ? dimFill : tc('primary', defaultAlphas[i]));
+    ctx.fillRect(colL, band.top, colW, bh);
+  });
+
+  // Zone boundary lines + depth labels
+  var zoneYs = [z1Y, z2Y, z3Y, z4Y];
+  var depthLabels = [formatDepth(state.animDepth1), formatDepth(state.animDepth2),
+                     formatDepth(state.animDepth3), formatDepth(state.animDepth4)];
+  var boundaryAlphas = [0.30, 0.25, 0.22, 0.20];
+
+  zoneYs.forEach(function(zy, idx) {
+    var phaseBelow = idx + 2;
+    var phaseAbove = idx + 1;
+    var isHovered = hp === phaseAbove || hp === phaseBelow;
+    var isDimmed = hp > 0 && !isHovered;
+    var a = isHovered ? Math.min(boundaryAlphas[idx] * 2.2, 0.5)
+          : isDimmed ? boundaryAlphas[idx] * 0.2
+          : boundaryAlphas[idx];
+
+    ctx.beginPath();
+    ctx.moveTo(colL, zy); ctx.lineTo(colL + colW, zy);
+    ctx.strokeStyle = tc('primary', a); ctx.lineWidth = 1;
+    ctx.setLineDash([]); ctx.stroke();
+
+    // Depth label on right side
+    ctx.fillStyle = tc('primary', a);
+    ctx.font = "500 9px " + font; ctx.textAlign = 'left';
+    ctx.fillText(depthLabels[idx], colL + colW + 10, zy + 3);
+  });
+
+  // Zone name labels (left side)
+  var zoneNames = cfg.zoneNames;
+  var zoneMidYs = [
+    (colT + z1Y) / 2, (z1Y + z2Y) / 2, (z2Y + z3Y) / 2,
+    (z3Y + z4Y) / 2, (z4Y + z5Y) / 2
+  ];
+  var zoneLabelsShort = ['ZONE 1', 'ZONE 2', 'ZONE 3', 'ZONE 4', 'ZONE 5'];
+
+  zoneMidYs.forEach(function(my, i) {
+    var zNum = i + 1;
+    var isHovered = hp === zNum;
+    var isDimmed = hp > 0 && hp !== zNum;
+    ctx.fillStyle = isHovered ? tc('primary', 0.90) : isDimmed ? tc('neutral', 0.20) : tc('neutral', 0.70);
+    ctx.font = '600 10px ' + font; ctx.textAlign = 'right';
+    ctx.fillText(zoneLabelsShort[i], colL - 90, my - 2);
+    ctx.fillStyle = isHovered ? tc('primary', 0.55) : isDimmed ? tc('neutral', 0.08) : tc('neutral', 0.45);
+    ctx.font = '400 9px ' + font;
+    ctx.fillText(zoneNames[i], colL - 90, my + 11);
+  });
+
+  // "SEA LEVEL" label at top
+  ctx.fillStyle = tc('primary', 0.40);
+  ctx.font = "500 8px " + font; ctx.textAlign = 'center';
+  ctx.fillText('SEA LEVEL', colL + colW / 2, colT - 6);
+  ctx.beginPath();
+  ctx.moveTo(colL, colT); ctx.lineTo(colL + colW, colT);
+  ctx.strokeStyle = tc('primary', 0.25); ctx.lineWidth = 1.5;
+  ctx.setLineDash([]); ctx.stroke();
+
+  // "SEAFLOOR" label at bottom
+  ctx.fillStyle = tc('primary', 0.30);
+  ctx.font = "500 8px " + font; ctx.textAlign = 'center';
+  ctx.fillText('SEAFLOOR', colL + colW / 2, colT + colH + 14);
+  ctx.beginPath();
+  ctx.moveTo(colL, colT + colH); ctx.lineTo(colL + colW, colT + colH);
+  ctx.strokeStyle = tc('primary', 0.18); ctx.lineWidth = 1.5;
+  ctx.setLineDash([]); ctx.stroke();
+
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // LIGHT PENETRATION GRADIENT (toggle)
+  // ============================================================
+  if (state.showHeatmap) {
+    ctx.globalAlpha = lA('light');
+    var lightH = colH * 0.35;
+    var lg = ctx.createLinearGradient(colL, colT, colL, colT + lightH);
+    lg.addColorStop(0, tc('heat', 0.22));
+    lg.addColorStop(0.3, tc('heat', 0.12));
+    lg.addColorStop(0.7, tc('heat', 0.05));
+    lg.addColorStop(1, tc('heat', 0));
+    ctx.fillStyle = lg;
+    ctx.fillRect(colL, colT, colW, lightH);
+
+    // Light depth contours
+    var lightContours = [
+      { frac: 0.03, label: '1% light' },
+      { frac: 0.10, label: '0.1%' },
+      { frac: 0.20, label: 'Aphotic' }
+    ];
+    lightContours.forEach(function(ct) {
+      var cy = colT + colH * ct.frac;
+      ctx.beginPath();
+      ctx.moveTo(colL + 4, cy); ctx.lineTo(colL + colW - 4, cy);
+      ctx.strokeStyle = tc('heat', 0.20); ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = tc('heat', 0.35);
+      ctx.font = "400 7px " + font; ctx.textAlign = 'right';
+      ctx.fillText(ct.label, colL + colW - 6, cy - 3);
+    });
+  }
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // THERMOCLINE BAND
+  // ============================================================
+  ctx.globalAlpha = lA('thermocline');
+  var thermoTop = colT + colH * gv.zone1End * 0.6;
+  var thermoBot = colT + colH * gv.zone2End * 0.5;
+  var thermoH = thermoBot - thermoTop;
+  if (thermoH > 2) {
+    ctx.beginPath();
+    ctx.moveTo(colL, thermoTop); ctx.lineTo(colL + colW, thermoTop);
+    ctx.strokeStyle = tc('pathway', 0.30); ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(colL, thermoBot); ctx.lineTo(colL + colW, thermoBot);
+    ctx.strokeStyle = tc('pathway', 0.20); ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+
+    // Thermocline gradient fill
+    var tg = ctx.createLinearGradient(0, thermoTop, 0, thermoBot);
+    tg.addColorStop(0, tc('pathway', 0.08));
+    tg.addColorStop(0.5, tc('pathway', 0.04));
+    tg.addColorStop(1, tc('pathway', 0));
+    ctx.fillStyle = tg;
+    ctx.fillRect(colL, thermoTop, colW, thermoH);
+
+    ctx.fillStyle = tc('pathway', 0.35);
+    ctx.font = "400 7px " + font; ctx.textAlign = 'left';
+    ctx.fillText('THERMOCLINE', colL + 6, thermoTop + thermoH / 2 + 3);
+  }
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // CURRENT FLOW LINES — animated wavy horizontal lines
+  // ============================================================
+  ctx.globalAlpha = lA('currents');
+  currentLines.forEach(function(cl) {
+    if (gv.currentStrength < cl.depthFrac * 0.5) return;
+    var cy = colT + colH * cl.depthFrac;
+    var t = drawTime * cl.speed * 60;
+    ctx.beginPath();
+    var steps = 40;
+    for (var s = 0; s <= steps; s++) {
+      var frac = s / steps;
+      var px = colL + colW * frac;
+      var wave = Math.sin(frac * 6 + t) * 3 + Math.sin(frac * 10 + t * 1.3) * 1.5;
+      if (s === 0) ctx.moveTo(px, cy + wave);
+      else ctx.lineTo(px, cy + wave);
+    }
+    var clAlpha = 0.20 * gv.currentStrength * (1 - cl.depthFrac * 0.6);
+    ctx.strokeStyle = tc('pathway', clAlpha);
+    ctx.lineWidth = cl.width; ctx.stroke();
+
+    // Small arrow at end
+    var arrowX = colL + colW - 8;
+    var arrowY = cy + Math.sin(t) * 3;
+    ctx.beginPath();
+    ctx.moveTo(arrowX, arrowY - 3); ctx.lineTo(arrowX + 5, arrowY); ctx.lineTo(arrowX, arrowY + 3);
+    ctx.strokeStyle = tc('pathway', clAlpha * 0.8); ctx.lineWidth = 1; ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // MARINE SNOW — drifting particles
+  // ============================================================
+  ctx.globalAlpha = lA('snow');
+  snowParticles.forEach(function(p) {
+    p.y += p.speed; p.x += p.drift;
+    if (p.y > 1) { p.y = 0; p.x = Math.random(); }
+    if (p.x < 0) p.x = 1; if (p.x > 1) p.x = 0;
+
+    var px = colL + colW * p.x;
+    var py = colT + colH * p.y;
+    var depthFade = 0.3 + p.y * 0.7;
+    var visAlpha = p.opacity * gv.snowDensity * depthFade;
+    if (visAlpha < 0.02) return;
+    ctx.beginPath();
+    ctx.arc(px, py, p.size, 0, 6.28);
+    ctx.fillStyle = tc('neutral', visAlpha);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // BIOLUMINESCENCE — sparkle particles (toggle)
+  // ============================================================
+  if (state.showOverlay) {
+    ctx.globalAlpha = lA('biolum');
+    state.overlayPhase += 0.002;
+    if (state.overlayPhase > 1) state.overlayPhase = 0;
+
+    bioParticles.forEach(function(p) {
+      p.phase += p.speed;
+      var flicker = Math.sin(p.phase) * 0.5 + 0.5;
+      var px = colL + colW * p.x;
+      var py = colT + colH * p.y;
+
+      // Only glow in mesopelagic/bathypelagic range
+      if (p.y < gv.zone1End * 0.8 || p.y > gv.zone4End) return;
+
+      var glowR = p.size * (2 + flicker * 3);
+      var gg = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      gg.addColorStop(0, tc('overlay', 0.35 * flicker));
+      gg.addColorStop(0.5, tc('overlay', 0.10 * flicker));
+      gg.addColorStop(1, tc('overlay', 0));
+      ctx.beginPath(); ctx.arc(px, py, glowR, 0, 6.28);
+      ctx.fillStyle = gg; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(px, py, p.size * 0.5, 0, 6.28);
+      ctx.fillStyle = tc('overlay', 0.60 * flicker);
+      ctx.fill();
+    });
+  }
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // DIEL VERTICAL MIGRATION — organisms moving up/down
+  // ============================================================
+  if (state.showMigration) {
+    ctx.globalAlpha = lA('migration');
+    // Slow day/night cycle (~40 seconds per full cycle)
+    state.migrationTime += 1/60;
+    var dayCycle = (Math.sin(state.migrationTime * 0.16) + 1) / 2; // 0=night, 1=day
+    state.isNight = dayCycle < 0.5;
+    var migT = state.isNight ? 1 - dayCycle * 2 : (dayCycle - 0.5) * 2; // 0-1 rise, 1-0 descend
+
+    // Day/night indicator — subtle glow at top
+    var nightAlpha = (1 - dayCycle) * 0.06;
+    if (nightAlpha > 0.005) {
+      var nightG = ctx.createLinearGradient(0, colT, 0, colT + colH * 0.15);
+      nightG.addColorStop(0, 'rgba(20,20,60,' + nightAlpha + ')');
+      nightG.addColorStop(1, 'rgba(20,20,60,0)');
+      ctx.fillStyle = nightG;
+      ctx.fillRect(colL, colT, colW, colH * 0.15);
+    }
+
+    // Day/night label
+    ctx.font = "500 7px " + font; ctx.textAlign = 'right';
+    ctx.fillStyle = state.isNight ? 'rgba(140,140,220,0.40)' : 'rgba(255,210,100,0.30)';
+    ctx.fillText(state.isNight ? 'NIGHT' : 'DAY', colL + colW - 6, colT + 12);
+
+    migrationOrgs.forEach(function(org) {
+      // Smooth interpolation between day and night positions
+      var targetY = state.isNight ? org.nightY : org.dayY;
+      org.currentY += (targetY - org.currentY) * 0.008;
+
+      // Small wandering motion
+      var wobbleX = Math.sin(drawTime * 0.8 + org.phase) * 0.015;
+      var wobbleY = Math.cos(drawTime * 0.6 + org.phase * 1.3) * 0.005;
+
+      var px = colL + colW * (org.x + wobbleX);
+      var py = colT + colH * (org.currentY + wobbleY);
+
+      // Soft glow
+      var glowR = org.size * 2.5;
+      var gg = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      gg.addColorStop(0, 'rgba(160,120,255,0.25)');
+      gg.addColorStop(0.6, 'rgba(160,120,255,0.06)');
+      gg.addColorStop(1, 'rgba(160,120,255,0)');
+      ctx.beginPath(); ctx.arc(px, py, glowR, 0, 6.28);
+      ctx.fillStyle = gg; ctx.fill();
+
+      // Organism dot
+      ctx.beginPath(); ctx.arc(px, py, org.size * 0.6, 0, 6.28);
+      ctx.fillStyle = 'rgba(180,150,255,0.45)';
+      ctx.fill();
+    });
+  }
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // SOFAR SOUND CHANNEL — animated wave lines showing speed
+  // ============================================================
+  if (state.showSofar) {
+    ctx.globalAlpha = lA('sofar');
+    // Sound speed: fast at surface (warm water), slowest at channel axis (~1000m),
+    // fast again at depth (pressure). Visualize with horizontal wave lines whose
+    // animation speed and wavelength reflect the actual sound speed at each depth.
+    var channelAxis = gv.zone2End * 0.6; // ~18% of column depth
+    var sofarLineCount = 12;
+
+    for (var sl = 0; sl < sofarLineCount; sl++) {
+      var depthFrac = (sl + 0.5) / sofarLineCount;
+      var lineY = colT + colH * depthFrac;
+
+      // Sound speed model: distance from channel axis determines speed
+      var distFromAxis = Math.abs(depthFrac - channelAxis);
+      var speedNorm = 0.25 + Math.min(distFromAxis * 2.2, 0.75); // 0.25 at axis, up to 1.0 far away
+
+      // Animation: faster speed = faster scroll, longer wavelength
+      var animSpeed = speedNorm * 2.5;
+      var waveLen = 8 + speedNorm * 18; // tight waves at axis, stretched at surface/deep
+      var amplitude = 2.0 + (1 - speedNorm) * 2.5; // bigger amplitude at slow channel
+
+      // Alpha: brighter near the channel axis to highlight it
+      var proximityAlpha = 0.12 + (1 - speedNorm) * 0.25;
+
+      ctx.beginPath();
+      var t = drawTime * animSpeed * 40;
+      for (var sx = 0; sx <= 50; sx++) {
+        var frac = sx / 50;
+        var px = colL + colW * frac;
+        var wave = Math.sin(frac * colW / waveLen + t) * amplitude;
+        if (sx === 0) ctx.moveTo(px, lineY + wave);
+        else ctx.lineTo(px, lineY + wave);
+      }
+      ctx.strokeStyle = 'rgba(255,200,100,' + proximityAlpha + ')';
+      ctx.lineWidth = speedNorm > 0.5 ? 1 : 1.5;
+      ctx.stroke();
+    }
+
+    // Subtle highlight band at the channel axis
+    var axisY = colT + colH * channelAxis;
+    var bandH = colH * 0.06;
+    var sg = ctx.createLinearGradient(0, axisY - bandH, 0, axisY + bandH);
+    sg.addColorStop(0, 'rgba(255,200,100,0)');
+    sg.addColorStop(0.5, 'rgba(255,200,100,0.06)');
+    sg.addColorStop(1, 'rgba(255,200,100,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(colL, axisY - bandH, colW, bandH * 2);
+
+    // Labels
+    ctx.font = "500 7px " + font; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,200,100,0.45)';
+    ctx.fillText('FAST  ~1520 m/s', colL + 6, colT + 10);
+    ctx.fillStyle = 'rgba(255,200,100,0.50)';
+    ctx.fillText('SLOW  ~1480 m/s', colL + 6, axisY - bandH - 3);
+    ctx.fillStyle = 'rgba(255,200,100,0.35)';
+    ctx.font = "400 6px " + font;
+    ctx.fillText('SOFAR CHANNEL', colL + 6, axisY + 3);
+    ctx.fillStyle = 'rgba(255,200,100,0.40)';
+    ctx.font = "500 7px " + font;
+    ctx.fillText('FAST  (pressure)', colL + 6, colT + colH - 6);
+  }
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // PRESSURE DARKENING OVERLAY
+  // ============================================================
+  ctx.globalAlpha = lA('pressure');
+  var pg = ctx.createLinearGradient(0, colT, 0, colT + colH);
+  pg.addColorStop(0, tc('density', 0));
+  pg.addColorStop(0.3, tc('density', 0.02));
+  pg.addColorStop(0.6, tc('density', 0.05));
+  pg.addColorStop(1, tc('density', 0.10));
+  ctx.fillStyle = pg;
+  ctx.fillRect(colL, colT, colW, colH);
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // OUTER COLUMN BORDER
+  // ============================================================
+  ctx.strokeStyle = tc('primary', 0.18);
+  ctx.lineWidth = 1.5; ctx.setLineDash([]);
+  ctx.strokeRect(colL, colT, colW, colH);
+
+  var maxDepth = state.animDepth5;
+
+  // ============================================================
+  // DEPTH SCALE RULER (right side, aligned with zone labels)
+  // ============================================================
+  var rulerX = colL + colW + 68;
+  var tickCount = 6;
+  ctx.fillStyle = tc('neutral', 0.30);
+  ctx.font = "400 8px " + font; ctx.textAlign = 'left';
+  for (var ti = 0; ti <= tickCount; ti++) {
+    var frac = ti / tickCount;
+    var ty = colT + colH * frac;
+    var depthVal = maxDepth * frac;
+    ctx.beginPath();
+    ctx.moveTo(rulerX - 3, ty); ctx.lineTo(rulerX + 3, ty);
+    ctx.strokeStyle = tc('neutral', 0.20); ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillText(formatDepth(depthVal), rulerX + 6, ty + 3);
+  }
+  // Ruler line
+  ctx.beginPath();
+  ctx.moveTo(rulerX, colT); ctx.lineTo(rulerX, colT + colH);
+  ctx.strokeStyle = tc('neutral', 0.10); ctx.lineWidth = 1; ctx.stroke();
+
+  // ============================================================
+  // EXPLORATION DEPTH RECORDS — historical depth markers
+  // Only show outside tour, or during chapter 2 (Descent Through the Zones)
+  // ============================================================
+  var isTourActive = (typeof tour !== 'undefined') && tour.active;
+  var showRecords = !isTourActive || state.tourRecords !== null;
+  if (showRecords) {
+  var depthRecords = [
+    { depth: 40, label: 'Scuba limit', icon: '●' },
+    { depth: 332, label: 'Saturation dive', icon: '●' },
+    { depth: 500, label: 'Submarine (WWII)', icon: '▸' },
+    { depth: 2250, label: 'Sperm whale', icon: '●' },
+    { depth: 3800, label: 'Titanic', icon: '▸' },
+    { depth: 6500, label: 'Alvin (DSV)', icon: '▸' },
+    { depth: 8336, label: 'Deepest fish', icon: '●' },
+    { depth: 10916, label: 'Trieste (1960)', icon: '▸' }
+  ];
+  var recX = colL - 4;
+  ctx.textAlign = 'right';
+  depthRecords.forEach(function(rec) {
+    if (rec.depth > maxDepth * 0.95) return;
+    // During tour, only show records listed in tourRecords
+    if (isTourActive && state.tourRecords && state.tourRecords.indexOf(rec.depth) === -1) return;
+    var recFrac = rec.depth / maxDepth;
+    var recY = colT + colH * recFrac;
+    // Small tick mark on left edge of column
+    ctx.beginPath();
+    ctx.moveTo(colL, recY); ctx.lineTo(colL - 6, recY);
+    ctx.strokeStyle = tc('pathway', 0.25); ctx.lineWidth = 1; ctx.stroke();
+    // Small diamond marker
+    ctx.fillStyle = tc('pathway', 0.35);
+    ctx.beginPath();
+    ctx.moveTo(colL - 6, recY - 2.5); ctx.lineTo(colL - 3.5, recY);
+    ctx.lineTo(colL - 6, recY + 2.5); ctx.lineTo(colL - 8.5, recY);
+    ctx.closePath(); ctx.fill();
+    // Label
+    ctx.fillStyle = tc('pathway', 0.30);
+    ctx.font = "400 7px " + font;
+    ctx.fillText(rec.label, colL - 12, recY + 2.5);
+    // Depth value
+    ctx.fillStyle = tc('pathway', 0.20);
+    ctx.font = "400 6px " + font;
+    ctx.fillText(formatDepth(rec.depth), colL - 12, recY + 10);
+  });
+  } // end showRecords
+
+  // ============================================================
+  // FLOW PULSE — expanding horizontal wave
+  // ============================================================
+  ctx.globalAlpha = lA('pressure');
+  state.flowPulse += 0.003;
+  if (state.flowPulse > 1) state.flowPulse = 0;
+  var pulseY = colT + colH * state.flowPulse;
+  var pulseAlpha = 0.12 * (1 - state.flowPulse);
+  ctx.beginPath();
+  ctx.moveTo(colL, pulseY); ctx.lineTo(colL + colW, pulseY);
+  ctx.strokeStyle = tc('primary', pulseAlpha); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // ============================================================
+  // HIGHLIGHT OVERLAYS
+  // ============================================================
+  if (hl === 'light' && state.showHeatmap) {
+    var hlH = colH * 0.35;
+    var hlg = ctx.createLinearGradient(0, colT, 0, colT + hlH);
+    hlg.addColorStop(0, tc('heat', 0.30)); hlg.addColorStop(1, tc('heat', 0));
+    ctx.fillStyle = hlg; ctx.fillRect(colL, colT, colW, hlH);
+  }
+
+  if (hl === 'thermocline') {
+    var htTop = colT + colH * gv.zone1End * 0.6;
+    var htBot = colT + colH * gv.zone2End * 0.5;
+    ctx.fillStyle = tc('pathway', 0.15);
+    ctx.fillRect(colL, htTop, colW, htBot - htTop);
+    ctx.strokeStyle = tc('pathway', 0.55); ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(colL, htTop); ctx.lineTo(colL + colW, htTop); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(colL, htBot); ctx.lineTo(colL + colW, htBot); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if (hl === 'currents') {
+    currentLines.forEach(function(cl) {
+      var cy2 = colT + colH * cl.depthFrac;
+      var t2 = drawTime * cl.speed * 60;
+      ctx.beginPath();
+      for (var s = 0; s <= 40; s++) {
+        var frac = s / 40;
+        var px = colL + colW * frac;
+        var wave = Math.sin(frac * 6 + t2) * 3 + Math.sin(frac * 10 + t2 * 1.3) * 1.5;
+        if (s === 0) ctx.moveTo(px, cy2 + wave); else ctx.lineTo(px, cy2 + wave);
+      }
+      ctx.strokeStyle = tc('pathway', 0.55); ctx.lineWidth = cl.width + 0.5; ctx.stroke();
+    });
+  }
+
+  if (hl === 'snow') {
+    snowParticles.forEach(function(p) {
+      var px = colL + colW * p.x;
+      var py = colT + colH * p.y;
+      ctx.beginPath(); ctx.arc(px, py, p.size + 0.5, 0, 6.28);
+      ctx.fillStyle = tc('neutral', p.opacity * 0.8); ctx.fill();
+    });
+  }
+
+  if (hl === 'biolum' && state.showOverlay) {
+    bioParticles.forEach(function(p) {
+      if (p.y < gv.zone1End * 0.8 || p.y > gv.zone4End) return;
+      var px = colL + colW * p.x;
+      var py = colT + colH * p.y;
+      var flicker = Math.sin(p.phase) * 0.5 + 0.5;
+      var glowR = p.size * (3 + flicker * 4);
+      var gg = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      gg.addColorStop(0, tc('overlay', 0.55 * flicker));
+      gg.addColorStop(1, tc('overlay', 0));
+      ctx.beginPath(); ctx.arc(px, py, glowR, 0, 6.28);
+      ctx.fillStyle = gg; ctx.fill();
+    });
+  }
+
+  if (hl === 'pressure') {
+    var hpg = ctx.createLinearGradient(0, colT, 0, colT + colH);
+    hpg.addColorStop(0, tc('density', 0)); hpg.addColorStop(1, tc('density', 0.20));
+    ctx.fillStyle = hpg; ctx.fillRect(colL, colT, colW, colH);
+  }
+
+  if (hl === 'zones') {
+    var zAlphas = [0.10, 0.08, 0.06, 0.05, 0.04];
+    zoneBands.forEach(function(band, i) {
+      ctx.fillStyle = tc('primary', zAlphas[i]);
+      ctx.fillRect(colL, band.top, colW, band.bottom - band.top);
+    });
+    zoneYs.forEach(function(zy) {
+      ctx.beginPath(); ctx.moveTo(colL, zy); ctx.lineTo(colL + colW, zy);
+      ctx.strokeStyle = tc('primary', 0.50); ctx.lineWidth = 1.5; ctx.stroke();
+    });
+  }
+
+  if (hl === 'migration' && state.showMigration) {
+    migrationOrgs.forEach(function(org) {
+      var px = colL + colW * org.x;
+      var py = colT + colH * org.currentY;
+      var glowR = org.size * 4;
+      var gg = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      gg.addColorStop(0, 'rgba(160,120,255,0.45)');
+      gg.addColorStop(1, 'rgba(160,120,255,0)');
+      ctx.beginPath(); ctx.arc(px, py, glowR, 0, 6.28);
+      ctx.fillStyle = gg; ctx.fill();
+    });
+  }
+
+  if (hl === 'sofar' && state.showSofar) {
+    var hlAxisY = colT + colH * gv.zone2End * 0.6;
+    var hlBandH = colH * 0.10;
+    ctx.fillStyle = 'rgba(255,200,100,0.10)';
+    ctx.fillRect(colL, hlAxisY - hlBandH, colW, hlBandH * 2);
+    ctx.strokeStyle = 'rgba(255,200,100,0.55)'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(colL, hlAxisY); ctx.lineTo(colL + colW, hlAxisY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+var ro = new ResizeObserver(function() { resize(); resize3D(); });
+ro.observe(container);
+resize();
+draw();
+
+// ============================================================
+// 3D CROSS-SECTION — Tall vertical cylinder with 5 ocean zones
+// ============================================================
+var scene3d, camera3d, renderer3d, puckGroup, groundGrid;
+var puckMeshes = [], puckWires = [], showerScreen;
+var puck3dContainer = document.getElementById('puck3dContainer');
+var lastPuckLevel = -1, lastPuckMode = null, lastPuckThemeDark = null;
+
+var orbitTheta = 0.4, orbitPhi = 1.1, orbitRadius = 12.0;
+var isDragging3D = false, dragStart3D = { x: 0, y: 0 };
+
+var waterParticles3D = [];
+var particleGroup;
+var saturationClock = 0;
+var cremaMesh3D = null, cremaExpand3D = 0;
+var channelingLines = [], channelingGroup;
+var idleResumeTimer = 0, lastDragTime = 0, clock3D = 0;
+var puckLayerData = { yOffsets: [], heights: [], totalH: 4.0, radius: 0.8 };
+
+function init3D() {
+  if (typeof THREE === 'undefined') return;
+  scene3d = new THREE.Scene();
+  camera3d = new THREE.PerspectiveCamera(45, 440/540, 0.1, 100);
+  camera3d.position.set(3, 3, 8);
+  camera3d.lookAt(0, 1.5, 0);
+
+  renderer3d = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer3d.setClearColor(0x000000, 0);
+  var rect3d = puck3dContainer.getBoundingClientRect();
+  renderer3d.setSize(rect3d.width, rect3d.height);
+  puck3dContainer.appendChild(renderer3d.domElement);
+
+  scene3d.add(new THREE.AmbientLight(0xffffff, 0.5));
+  var dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  dirLight.position.set(2, 5, 3); scene3d.add(dirLight);
+
+  puckGroup = new THREE.Group(); scene3d.add(puckGroup);
+  particleGroup = new THREE.Group(); scene3d.add(particleGroup);
+  channelingGroup = new THREE.Group(); scene3d.add(channelingGroup);
+
+  createGroundPlane();
+  createPuckLayers(state.currentLevel);
+  initWaterParticles3D();
+  initMigration3D();
+  initSofar3D();
+  setupDragControls();
+  updatePuck3DTheme(true);
+  animate3D();
+}
+
+function createGroundPlane() {
+  var col = t3('grid');
+  groundGrid = new THREE.GridHelper(6, 12, col, col);
+  groundGrid.material.transparent = true;
+  groundGrid.material.opacity = state.isDark ? 0.10 : 0.13;
+  groundGrid.material.depthWrite = false;
+  groundGrid.position.set(0, -0.1, 0);
+  scene3d.add(groundGrid);
+}
+
+function createPuckLayers(levelVal, mode) {
+  puckMeshes.forEach(function(m) { m.geometry.dispose(); m.material.dispose(); puckGroup.remove(m); });
+  puckWires.forEach(function(m) { m.geometry.dispose(); m.material.dispose(); puckGroup.remove(m); });
+  puckMeshes = []; puckWires = [];
+  if (showerScreen) { showerScreen.geometry.dispose(); showerScreen.material.dispose(); puckGroup.remove(showerScreen); }
+
+  var bcfg = modeConfigs[mode || state.activeMode];
+  var p3d = bcfg.puck3d;
+  var pR = p3d.radius, pH = p3d.height;
+  var gv = getLevelValues(levelVal);
+  var zoneEnds = [gv.zone1End, gv.zone2End, gv.zone3End, gv.zone4End, gv.zone5End];
+  var heights = [];
+  var prev = 0;
+  for (var zi = 0; zi < 5; zi++) {
+    heights.push(pH * (zoneEnds[zi] - prev));
+    prev = zoneEnds[zi];
+  }
+
+  var colors = t3('baseColors');
+  var fillOps = [0.20, 0.16, 0.12, 0.09, 0.06];
+  var wireOps = [0.30, 0.24, 0.18, 0.14, 0.10];
+  var yOff = pH; // build top-down: zone 1 at top
+
+  puckLayerData = { yOffsets: [], heights: [], totalH: pH, radius: pR };
+
+  for (var i = 0; i < 5; i++) {
+    var h = heights[i];
+    yOff -= h;
+    puckLayerData.yOffsets.push(yOff);
+    puckLayerData.heights.push(h);
+    if (h < 0.01) continue;
+
+    var geo = new THREE.CylinderGeometry(pR, pR, h, 24);
+    var mat = new THREE.MeshPhongMaterial({
+      color: colors[i], transparent: true, opacity: fillOps[i],
+      side: THREE.FrontSide, depthWrite: false
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = yOff + h / 2;
+    mesh.userData.baseOpacity = fillOps[i];
+    puckGroup.add(mesh); puckMeshes.push(mesh);
+
+    var wGeo = new THREE.CylinderGeometry(pR, pR, h, 24);
+    var wMat = new THREE.MeshBasicMaterial({
+      color: colors[i], wireframe: true, transparent: true, opacity: wireOps[i]
+    });
+    var wire = new THREE.Mesh(wGeo, wMat);
+    wire.position.y = yOff + h / 2;
+    wire.userData.baseOpacity = wireOps[i];
+    puckGroup.add(wire); puckWires.push(wire);
+  }
+
+  // Water surface disc on top
+  var sGeo = new THREE.CylinderGeometry(p3d.screenRadius, p3d.screenRadius, 0.04, 24);
+  var sMat = new THREE.MeshPhongMaterial({
+    color: p3d.screenColor, transparent: true, opacity: p3d.screenOpacity,
+    emissive: 0x224466, emissiveIntensity: 0.2
+  });
+  showerScreen = new THREE.Mesh(sGeo, sMat);
+  showerScreen.position.y = pH + 0.04;
+  showerScreen.userData.baseOpacity = p3d.screenOpacity;
+  puckGroup.add(showerScreen);
+
+  lastPuckLevel = levelVal;
+  lastPuckMode = mode || state.activeMode;
+  rebuildChannelingLines();
+}
+
+function initWaterParticles3D() {
+  var count = 50;
+  var geo = new THREE.SphereGeometry(0.02, 4, 4);
+  for (var i = 0; i < count; i++) {
+    var mat = new THREE.MeshBasicMaterial({ color: 0xCCDDEE, transparent: true, opacity: 0 });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.visible = false;
+    particleGroup.add(mesh);
+    waterParticles3D.push({ mesh: mesh, x: 0, z: 0, y: 0, speed: 0, life: 0, maxLife: 0, active: false });
+  }
+}
+
+function spawnParticle3D(p) {
+  var r = puckLayerData.radius;
+  var angle = Math.random() * Math.PI * 2;
+  var dist = Math.random() * r * 0.85;
+  p.x = Math.cos(angle) * dist; p.z = Math.sin(angle) * dist;
+  p.y = puckLayerData.totalH + 0.15;
+  var levelSpeed = 0.006 + state.currentLevel * 0.004;
+  p.speed = levelSpeed + Math.random() * levelSpeed * 0.5;
+  p.life = 0; p.maxLife = (puckLayerData.totalH + 0.3) / p.speed;
+  p.active = true; p.mesh.visible = true;
+  p.mesh.position.set(p.x, p.y, p.z); p.mesh.material.opacity = 0.4;
+}
+
+function updateWaterParticles3D() {
+  var spawnRate = 0.10 + state.currentLevel * 0.08;
+  waterParticles3D.forEach(function(p) {
+    if (!p.active) { if (Math.random() < spawnRate) spawnParticle3D(p); return; }
+    p.life++; p.y -= p.speed; p.mesh.position.y = p.y;
+    var lifeRatio = p.life / p.maxLife;
+    if (lifeRatio < 0.1) p.mesh.material.opacity = lifeRatio * 4;
+    else if (lifeRatio > 0.8) p.mesh.material.opacity = (1 - lifeRatio) * 4;
+    else p.mesh.material.opacity = 0.4;
+
+    // Color shifts from light blue to deep navy
+    if (lifeRatio < 0.2) p.mesh.material.color.setHex(0x88CCFF);
+    else if (lifeRatio < 0.5) p.mesh.material.color.setHex(0x4488CC);
+    else if (lifeRatio < 0.8) p.mesh.material.color.setHex(0x224466);
+    else p.mesh.material.color.setHex(0x112233);
+
+    if (p.y < -0.2) { p.active = false; p.mesh.visible = false; }
+  });
+}
+
+function updateSaturationAnimation() {
+  saturationClock += 0.002;
+  if (saturationClock > 1) saturationClock = 0;
+  var baseColors = t3('baseColors');
+  var saturatedColors = t3('saturatedColors');
+  var baseFillOps = [0.20, 0.16, 0.12, 0.09, 0.06];
+  var phaseTimings = [
+    { start: 0, end: 0.20 }, { start: 0.15, end: 0.40 },
+    { start: 0.30, end: 0.60 }, { start: 0.45, end: 0.80 },
+    { start: 0.60, end: 1.0 }
+  ];
+  puckMeshes.forEach(function(m, i) {
+    if (i >= phaseTimings.length) return;
+    var pt = phaseTimings[i];
+    var t = Math.max(0, Math.min(1, (saturationClock - pt.start) / (pt.end - pt.start)));
+    t = t * t * (3 - 2 * t);
+    var baseC = new THREE.Color(baseColors[i]);
+    var satC = new THREE.Color(saturatedColors[i]);
+    baseC.lerp(satC, t * 0.5);
+    m.material.color.copy(baseC);
+    m.material.opacity = (baseFillOps[i] + t * 0.06) * (state.isDark ? 0.85 : 1.0);
+  });
+}
+
+function updateCrema3D() {
+  if (!state.showOverlay) {
+    if (cremaMesh3D) cremaMesh3D.visible = false;
+    return;
+  }
+  var t = state.overlayPhase;
+  var eased = t * t * (3 - 2 * t);
+  var fade = 1 - t;
+  var pR = puckLayerData.radius;
+  var glowR = pR * (0.3 + eased * 0.7);
+  var glowH = 0.1 + eased * 0.3;
+  // Position in mesopelagic zone
+  var mesoY = puckLayerData.totalH * 0.7;
+
+  if (cremaMesh3D) { cremaMesh3D.geometry.dispose(); puckGroup.remove(cremaMesh3D); }
+  var cGeo = new THREE.CylinderGeometry(glowR, glowR, glowH, 24);
+  var cMat = new THREE.MeshPhongMaterial({
+    color: t3('crema'), transparent: true,
+    opacity: (0.15 + eased * 0.15) * (0.3 + fade * 0.7),
+    emissive: t3('cremaEmissive'),
+    emissiveIntensity: (0.3 + eased * 0.2) * (0.3 + fade * 0.7),
+    side: THREE.DoubleSide, depthWrite: false
+  });
+  cremaMesh3D = new THREE.Mesh(cGeo, cMat);
+  cremaMesh3D.position.y = mesoY;
+  cremaMesh3D.userData.baseOpacity = cMat.opacity;
+  cremaMesh3D.userData.baseEmissive = cMat.emissiveIntensity;
+  puckGroup.add(cremaMesh3D);
+}
+
+function rebuildChannelingLines() {
+  channelingLines.forEach(function(obj) { obj.geometry.dispose(); obj.material.dispose(); channelingGroup.remove(obj); });
+  channelingLines = [];
+  var gv = getLevelValues(state.currentLevel);
+  var strength = gv.currentStrength;
+  if (strength < 0.1) return;
+  var numLines = Math.floor(2 + strength * 3);
+  var pR = puckLayerData.radius, pH = puckLayerData.totalH;
+
+  for (var i = 0; i < numLines; i++) {
+    var depthFrac = 0.05 + (i / numLines) * 0.8;
+    var y = pH * (1 - depthFrac);
+    var points = [];
+    var segments = 10;
+    for (var s = 0; s <= segments; s++) {
+      var frac = s / segments;
+      var x = (frac - 0.5) * pR * 2;
+      var wobble = Math.sin(frac * 4 + i * 2) * pR * 0.15;
+      points.push(new THREE.Vector3(x, y, wobble));
+    }
+    var curve = new THREE.CatmullRomCurve3(points);
+    var tubeGeo = new THREE.TubeGeometry(curve, 12, 0.01 + strength * 0.01, 6, false);
+    var tubeMat = new THREE.MeshBasicMaterial({
+      color: t3('tube'), transparent: true, opacity: 0.10 + strength * 0.15
+    });
+    var tube = new THREE.Mesh(tubeGeo, tubeMat);
+    tube.userData.baseOpacity = tubeMat.opacity;
+    channelingGroup.add(tube); channelingLines.push(tube);
+  }
+}
+
+function updateChannelingVisibility() {
+  var pulse = 0.85 + Math.sin(clock3D * 2) * 0.15;
+  channelingLines.forEach(function(tube) { tube.material.opacity = tube.userData.baseOpacity * pulse; });
+}
+
+function updateTemperatureGlow() {
+  if (!state.showHeatmap) {
+    puckMeshes.forEach(function(m) { m.material.emissive = m.material.emissive || new THREE.Color(0); m.material.emissive.setHex(0); m.material.emissiveIntensity = 0; });
+    return;
+  }
+  var glowColors = t3('glowColors');
+  var glowIntensities = [0.50, 0.35, 0.20, 0.10, 0.05];
+  var pulse = 0.9 + Math.sin(clock3D * 1.5) * 0.1;
+  puckMeshes.forEach(function(m, i) {
+    var ci = Math.min(i, glowColors.length - 1);
+    m.material.emissive = m.material.emissive || new THREE.Color(0);
+    m.material.emissive.setHex(glowColors[ci]);
+    m.material.emissiveIntensity = glowIntensities[ci] * pulse;
+  });
+}
+
+// ---- MIGRATION ORGANISMS IN 3D ----
+var migrationMeshes3D = [];
+var migrationGroup;
+
+function initMigration3D() {
+  migrationGroup = new THREE.Group();
+  scene3d.add(migrationGroup);
+  var geo = new THREE.SphereGeometry(0.025, 6, 6);
+  for (var i = 0; i < 30; i++) {
+    var mat = new THREE.MeshBasicMaterial({ color: 0xA080FF, transparent: true, opacity: 0 });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.visible = false;
+    migrationGroup.add(mesh);
+    var pR = puckLayerData.radius;
+    var angle = Math.random() * Math.PI * 2;
+    var dist = Math.random() * pR * 0.75;
+    migrationMeshes3D.push({
+      mesh: mesh,
+      baseX: Math.cos(angle) * dist,
+      baseZ: Math.sin(angle) * dist,
+      dayY: puckLayerData.totalH * (0.25 + Math.random() * 0.45),
+      nightY: puckLayerData.totalH * (0.80 + Math.random() * 0.15),
+      currentY: puckLayerData.totalH * 0.5,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function updateMigration3D() {
+  if (!state.showMigration) {
+    migrationMeshes3D.forEach(function(m) { m.mesh.visible = false; });
+    return;
+  }
+  var pH = puckLayerData.totalH;
+  migrationMeshes3D.forEach(function(m, i) {
+    m.mesh.visible = true;
+    var targetY = state.isNight ? m.nightY : m.dayY;
+    m.currentY += (targetY - m.currentY) * 0.006;
+    // Gentle wandering
+    var wobX = Math.sin(clock3D * 0.5 + m.phase) * 0.04;
+    var wobZ = Math.cos(clock3D * 0.4 + m.phase * 1.3) * 0.04;
+    m.mesh.position.set(m.baseX + wobX, m.currentY, m.baseZ + wobZ);
+    m.mesh.material.opacity = 0.55;
+    m.mesh.material.color.setHex(0xB090FF);
+  });
+}
+
+// ---- SOFAR SOUND CHANNEL IN 3D ----
+var sofarRings3D = [];
+var sofarGroup;
+
+function initSofar3D() {
+  sofarGroup = new THREE.Group();
+  scene3d.add(sofarGroup);
+  var pH = puckLayerData.totalH;
+  var pR = puckLayerData.radius;
+  var ringCount = 10;
+  for (var i = 0; i < ringCount; i++) {
+    var frac = (i + 0.5) / ringCount;
+    // Sound speed: fast at top, slow at ~18% depth (channel axis), fast again at bottom
+    var channelAxis = 0.18;
+    var dist = Math.abs(frac - channelAxis);
+    var speedNorm = 0.25 + Math.min(dist * 2.2, 0.75);
+    var geo = new THREE.RingGeometry(pR * 1.02, pR * 1.02 + 0.008, 48);
+    var mat = new THREE.MeshBasicMaterial({
+      color: 0xFFC864, transparent: true, opacity: 0, side: THREE.DoubleSide
+    });
+    var ring = new THREE.Mesh(geo, mat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = pH * (1 - frac);
+    sofarGroup.add(ring);
+    sofarRings3D.push({
+      mesh: ring,
+      baseY: pH * (1 - frac),
+      speedNorm: speedNorm,
+      frac: frac,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function updateSofar3D() {
+  if (!state.showSofar) {
+    sofarRings3D.forEach(function(r) { r.mesh.visible = false; });
+    return;
+  }
+  sofarRings3D.forEach(function(r) {
+    r.mesh.visible = true;
+    // Pulsing scale based on speed — faster speed = faster pulse, larger amplitude
+    var pulseSpeed = r.speedNorm * 3.0;
+    var pulse = Math.sin(clock3D * pulseSpeed + r.phase) * 0.5 + 0.5;
+    var scale = 1.0 + pulse * r.speedNorm * 0.15;
+    r.mesh.scale.set(scale, scale, 1);
+    // Brighter near channel axis (slow = more visible)
+    var baseAlpha = 0.12 + (1 - r.speedNorm) * 0.30;
+    r.mesh.material.opacity = baseAlpha * (0.6 + pulse * 0.4);
+  });
+}
+
+function updateIdleRotation() {
+  if (isDragging3D) { lastDragTime = clock3D; return; }
+  var timeSinceDrag = clock3D - lastDragTime;
+  if (timeSinceDrag < 2.0) return;
+  var easeIn = Math.min(1, (timeSinceDrag - 2.0) / 1.5);
+  orbitTheta += (Math.PI * 2) / (30 * 60) * easeIn;
+}
+
+function updateHighlight3D() {
+  var hl = state.highlightedLayer;
+  function layerMul(name) { return !hl ? 1.0 : (hl === name ? 1.4 : 0.08); }
+  var puckMul = Math.max(layerMul('pressure'), layerMul('zones'));
+  puckMeshes.forEach(function(m) { m.material.opacity = m.userData.baseOpacity * puckMul; });
+  puckWires.forEach(function(m) {
+    m.material.opacity = m.userData.baseOpacity * puckMul;
+    if (hl === 'pressure') m.material.color.setHex(t3('wireHighlight'));
+  });
+  if (showerScreen) showerScreen.material.opacity = showerScreen.userData.baseOpacity * puckMul;
+  var flowMul = layerMul('snow');
+  waterParticles3D.forEach(function(p) {
+    if (p.active) p.mesh.material.opacity = Math.min(1, p.mesh.material.opacity * Math.max(flowMul, layerMul('pressure')));
+  });
+  var chanMul = layerMul('currents');
+  channelingLines.forEach(function(tube) { tube.material.opacity = tube.userData.baseOpacity * chanMul; });
+  if (cremaMesh3D && cremaMesh3D.visible !== false) {
+    var bMul = layerMul('biolum');
+    cremaMesh3D.material.opacity = cremaMesh3D.userData.baseOpacity * bMul;
+    cremaMesh3D.material.emissiveIntensity = cremaMesh3D.userData.baseEmissive * bMul;
+  }
+  if (hl === 'light' && state.showHeatmap) {
+    puckMeshes.forEach(function(m) { m.material.emissiveIntensity = (m.material.emissiveIntensity || 0) * 1.8; });
+  } else if (hl && hl !== 'light') {
+    puckMeshes.forEach(function(m) { m.material.emissiveIntensity = (m.material.emissiveIntensity || 0) * 0.1; });
+  }
+  if (groundGrid) groundGrid.material.opacity = hl ? (state.isDark ? 0.03 : 0.04) : (state.isDark ? 0.10 : 0.13);
+}
+
+function updatePuck3D() {
+  if (!scene3d) return;
+  var delta = Math.abs(state.currentLevel - lastPuckLevel);
+  var modeChanged = state.activeMode !== lastPuckMode;
+  if (delta > 0.01 || modeChanged) { createPuckLayers(state.currentLevel, state.activeMode); updatePuck3DTheme(true); }
+}
+
+function updatePuck3DTheme(force) {
+  if (!scene3d) return;
+  if (!force && state.isDark === lastPuckThemeDark) return;
+  lastPuckThemeDark = state.isDark;
+  var themeBaseColors = t3('baseColors');
+  var wireOps = [0.30, 0.24, 0.18, 0.14, 0.10];
+  puckWires.forEach(function(m, i) {
+    if (i < themeBaseColors.length) m.material.color.setHex(themeBaseColors[i]);
+    m.material.opacity = state.isDark ? wireOps[Math.min(i, wireOps.length-1)] * 0.85 : wireOps[Math.min(i, wireOps.length-1)];
+  });
+  if (groundGrid) {
+    groundGrid.material.opacity = state.isDark ? 0.10 : 0.13;
+    groundGrid.material.color = new THREE.Color(t3('grid'));
+  }
+  rebuildChannelingLines();
+}
+
+function resize3D() {
+  if (!renderer3d) return;
+  var rect3d = puck3dContainer.getBoundingClientRect();
+  if (rect3d.width === 0 || rect3d.height === 0) return;
+  renderer3d.setSize(rect3d.width, rect3d.height);
+  camera3d.aspect = rect3d.width / rect3d.height;
+  camera3d.updateProjectionMatrix();
+}
+
+function setupDragControls() {
+  var el = renderer3d.domElement;
+  el.addEventListener('mousedown', function(e) { isDragging3D = true; dragStart3D.x = e.clientX; dragStart3D.y = e.clientY; });
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging3D) return;
+    orbitTheta -= (e.clientX - dragStart3D.x) * 0.008;
+    orbitPhi = Math.max(0.15, Math.min(1.45, orbitPhi - (e.clientY - dragStart3D.y) * 0.008));
+    dragStart3D.x = e.clientX; dragStart3D.y = e.clientY;
+  });
+  window.addEventListener('mouseup', function() { isDragging3D = false; });
+  el.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) { isDragging3D = true; dragStart3D.x = e.touches[0].clientX; dragStart3D.y = e.touches[0].clientY; }
+  }, { passive: true });
+  el.addEventListener('touchmove', function(e) {
+    if (!isDragging3D || e.touches.length !== 1) return;
+    orbitTheta -= (e.touches[0].clientX - dragStart3D.x) * 0.008;
+    orbitPhi = Math.max(0.15, Math.min(1.45, orbitPhi - (e.touches[0].clientY - dragStart3D.y) * 0.008));
+    dragStart3D.x = e.touches[0].clientX; dragStart3D.y = e.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener('touchend', function() { isDragging3D = false; }, { passive: true });
+  el.addEventListener('wheel', function(e) { e.preventDefault(); orbitRadius = Math.max(5, Math.min(25, orbitRadius + e.deltaY * 0.01)); }, { passive: false });
+}
+
+function updateCamera3D() {
+  var bcfg = modeConfigs[state.activeMode];
+  var lookY = bcfg.puck3d.height * 0.45;
+  var lookTarget = new THREE.Vector3(0, lookY, 0);
+  camera3d.position.x = lookTarget.x + orbitRadius * Math.sin(orbitPhi) * Math.sin(orbitTheta);
+  camera3d.position.y = lookTarget.y + orbitRadius * Math.cos(orbitPhi);
+  camera3d.position.z = lookTarget.z + orbitRadius * Math.sin(orbitPhi) * Math.cos(orbitTheta);
+  camera3d.lookAt(lookTarget);
+}
+
+function animate3D() {
+  requestAnimationFrame(animate3D);
+  if (!renderer3d) return;
+  clock3D += 1 / 60;
+  updateIdleRotation(); updateCamera3D(); updatePuck3D(); updatePuck3DTheme();
+  updateSaturationAnimation(); updateWaterParticles3D(); updateCrema3D();
+  updateChannelingVisibility(); updateTemperatureGlow(); updateHighlight3D(); updateMigration3D(); updateSofar3D();
+  renderer3d.render(scene3d, camera3d);
+}
+
+init3D();
+
+// ============================================================
+// AMBIENT SOUND — Layered Web Audio API soundscape
+// ============================================================
+var ambiancePlaying = false;
+var ambianceBtn = document.getElementById('ambianceBtn');
+var audioCtx = null;
+var ambianceLayers = [];
+var ambianceMaster = null;
+
+var ambianceSources = [
+  { url: 'audio/gentle-waves.wav', baseVol: 0.35, fadeIn: 0, fadeOut: 3.0 },
+  { url: 'audio/immersive-sea.wav', baseVol: 0.28, fadeIn: 2.0, fadeOut: 2.5 },
+  { url: 'audio/ocean-waves.wav', baseVol: 0.30, fadeIn: 4.0, fadeOut: 3.5 }
+];
+
+function initAudioContext() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  ambianceMaster = audioCtx.createGain();
+  ambianceMaster.gain.value = 0;
+  ambianceMaster.connect(audioCtx.destination);
+}
+
+function loadAmbianceBuffer(url) {
+  return fetch(url)
+    .then(function(r) { return r.arrayBuffer(); })
+    .then(function(buf) { return audioCtx.decodeAudioData(buf); });
+}
+
+function createLoopingLayer(buffer, cfg) {
+  var gain = audioCtx.createGain();
+  gain.gain.value = cfg.baseVol;
+  gain.connect(ambianceMaster);
+
+  // Slight detune and playback rate variation for organic feel
+  var source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  // Crossfade at loop boundaries using the built-in loop with slight overlap
+  source.loopStart = 0.5;
+  source.loopEnd = buffer.duration - 0.5;
+  source.connect(gain);
+
+  return { source: source, gain: gain, cfg: cfg, buffer: buffer };
+}
+
+function startAmbiance() {
+  initAudioContext();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  // Stop any existing layers
+  ambianceLayers.forEach(function(layer) {
+    try { layer.source.stop(); } catch(e) {}
+  });
+  ambianceLayers = [];
+
+  var loadPromises = ambianceSources.map(function(cfg) {
+    return loadAmbianceBuffer(cfg.url).then(function(buffer) {
+      return { buffer: buffer, cfg: cfg };
+    });
+  });
+
+  Promise.all(loadPromises).then(function(results) {
+    var now = audioCtx.currentTime;
+
+    results.forEach(function(r) {
+      var layer = createLoopingLayer(r.buffer, r.cfg);
+      // Stagger start times for natural layering
+      layer.source.start(now + r.cfg.fadeIn);
+      ambianceLayers.push(layer);
+    });
+
+    // Fade master in over 3 seconds
+    ambianceMaster.gain.setValueAtTime(0, now);
+    ambianceMaster.gain.linearRampToValueAtTime(1.0, now + 3.0);
+
+    ambiancePlaying = true;
+    ambianceBtn.classList.add('ambiance-on');
+    ambianceBtn.querySelector('.material-symbols-outlined').textContent = 'volume_up';
+  }).catch(function(err) {
+    console.warn('Ambient audio load failed:', err);
+  });
+}
+
+function stopAmbiance() {
+  if (!audioCtx || !ambiancePlaying) return;
+  var now = audioCtx.currentTime;
+
+  // Fade master out over 2.5 seconds, then stop sources
+  ambianceMaster.gain.setValueAtTime(ambianceMaster.gain.value, now);
+  ambianceMaster.gain.linearRampToValueAtTime(0, now + 2.5);
+
+  // Stagger layer fadeouts for natural decay
+  ambianceLayers.forEach(function(layer) {
+    var fadeOut = layer.cfg.fadeOut || 2.5;
+    layer.gain.gain.setValueAtTime(layer.gain.gain.value, now);
+    layer.gain.gain.linearRampToValueAtTime(0, now + fadeOut);
+  });
+
+  setTimeout(function() {
+    ambianceLayers.forEach(function(layer) {
+      try { layer.source.stop(); } catch(e) {}
+    });
+    ambianceLayers = [];
+  }, 3500);
+
+  ambiancePlaying = false;
+  ambianceBtn.classList.remove('ambiance-on');
+  ambianceBtn.querySelector('.material-symbols-outlined').textContent = 'music_note';
+}
+
+ambianceBtn.addEventListener('click', function() { ambiancePlaying ? stopAmbiance() : startAmbiance(); });
+
+// ============================================================
+// GUIDED TOUR
+// ============================================================
+var tour = {
+  active: false, paused: false, currentChapter: -1, audio: null,
+  actionIndex: 0, savedState: null, tickRAF: null,
+  blurbOriginalHTML: '', charEls: [], audioDuration: 0
+};
+
+var tourChapterTitles = ['The Ocean Column', 'Descent Through the Zones', 'The SOFAR Channel', 'The Great Migration', 'Ocean Conditions'];
+
+var tourChapters = [
+  {
+    // Ch1: 54s — "You're looking at a vertical cross-section..."
+    id: '01-overview', audio: 'audio/01-overview.mp3',
+    caption: 'A vertical cross-section of the entire ocean — five pelagic zones shaped by light, temperature, and pressure. Sunlight vanishes within a few hundred meters. Pressure builds at one atmosphere per ten meters. The drifting particles are marine snow: the biological pump that feeds the deep.',
+    actions: [
+      // 0-8s: "cross-section... five pelagic zones" — walk through zones
+      { time: 0, fn: function() { tourAction.ensureMigration(false); tourAction.ensureSofar(false); tourAction.ensureHeatmap(true); tourAction.ensureOverlay(false); tourAction.setLevel(1); tourAction.setMode('tropical'); tourAction.highlightLayer('zones'); tourAction.startOrbit(); } },
+      { time: 1, fn: function() { tourAction.hoverPhase(1); } },
+      { time: 3, fn: function() { tourAction.hoverPhase(2); } },
+      { time: 5, fn: function() { tourAction.hoverPhase(3); } },
+      { time: 6, fn: function() { tourAction.hoverPhase(4); } },
+      { time: 7, fn: function() { tourAction.hoverPhase(5); } },
+      { time: 8, fn: function() { tourAction.hoverPhase(0); tourAction.highlightLayer(null); } },
+      // 15-22s: "Sunlight vanishes within the first few hundred meters"
+      { time: 15, fn: function() { tourAction.highlightLayer('light'); } },
+      // 22-28s: "temperature plummets through the thermocline"
+      { time: 22, fn: function() { tourAction.highlightLayer('thermocline'); } },
+      // 28-32s: "pressure builds at a crushing rate"
+      { time: 28, fn: function() { tourAction.highlightLayer('pressure'); } },
+      // 32-48s: "That gentle drift of particles... That's marine snow"
+      { time: 32, fn: function() { tourAction.highlightLayer('snow'); } },
+      // 48-54s: "biological pump... primary food source"
+      { time: 50, fn: function() { tourAction.highlightLayer(null); } }
+    ]
+  },
+  {
+    // Ch2: 105s — "Let's descend through the zones..."
+    id: '02-zones', audio: 'audio/02-zones.mp3',
+    caption: 'Descending through the zones — from scuba divers at 40m, past sperm whales hunting at 2,250m, the Titanic at 3,800m discovered by Alvin, the deepest fish at 8,336m, to the Trieste reaching the bottom of the Mariana Trench in 1960.',
+    actions: [
+      // 0-6s: "Let's descend through the zones"
+      { time: 0, fn: function() { tourAction.ensureMigration(false); tourAction.ensureSofar(false); tourAction.ensureOverlay(false); tourAction.setLevel(1); tourAction.highlightLayer('zones'); tourAction.hoverPhase(0); tourAction.showRecords(null); } },
+      // 6-22s: "epipelagic... scuba divers... phytoplankton"
+      { time: 6, fn: function() { tourAction.hoverPhase(1); tourAction.highlightLayer(null); tourAction.ensureHeatmap(true); } },
+      { time: 10, fn: function() { tourAction.showRecords([40]); } },
+      // 22-42s: "mesopelagic... sperm whales... Bioluminescence dominates"
+      { time: 22, fn: function() { tourAction.hoverPhase(2); tourAction.ensureHeatmap(false); tourAction.ensureOverlay(true); tourAction.highlightLayer('biolum'); tourAction.showRecords([2250]); } },
+      // 36s: transition to bathypelagic
+      { time: 36, fn: function() { tourAction.highlightLayer(null); tourAction.ensureOverlay(false); tourAction.showRecords(null); } },
+      // 42-62s: "bathypelagic... Titanic... Alvin"
+      { time: 42, fn: function() { tourAction.hoverPhase(3); tourAction.showRecords([3800]); } },
+      { time: 50, fn: function() { tourAction.showRecords([3800, 6500]); } },
+      // 62-80s: "abyssopelagic... deepest fish at 8,336m"
+      { time: 62, fn: function() { tourAction.hoverPhase(4); tourAction.setLevel(2); tourAction.showRecords([8336]); } },
+      // 80-100s: "hadal zone... Trieste... Mariana Trench"
+      { time: 80, fn: function() { tourAction.hoverPhase(5); tourAction.setLevel(3); tourAction.showRecords([10916]); } },
+      // 100-105s: wrap up
+      { time: 100, fn: function() { tourAction.hoverPhase(0); tourAction.highlightLayer(null); tourAction.setLevel(1); tourAction.showRecords(null); } }
+    ]
+  },
+  {
+    // Ch3: 88s — "Now let's explore something invisible... the SOFAR channel"
+    id: '03-sound', audio: 'audio/03-sound.mp3',
+    caption: 'The SOFAR channel — where sound speed hits a minimum at ~1,000m, trapping waves in a natural waveguide. Discovered in WWII when explosions were detected across entire oceans. Today it carries whale songs thousands of kilometers.',
+    actions: [
+      // 0-8s: "invisible but remarkable — the SOFAR channel"
+      { time: 0, fn: function() { tourAction.ensureMigration(false); tourAction.ensureOverlay(false); tourAction.ensureHeatmap(false); tourAction.ensureSofar(true); tourAction.setLevel(1); tourAction.setMode('tropical'); tourAction.highlightLayer('sofar'); tourAction.hoverPhase(0); } },
+      // 8-18s: "Near the surface, warm water conducts sound quickly"
+      { time: 8, fn: function() { tourAction.hoverPhase(1); } },
+      // 18-28s: "water gets colder and sound slows down"
+      { time: 18, fn: function() { tourAction.hoverPhase(2); } },
+      // 28-40s: "pressure takes over... minimum speed layer... SOFAR channel"
+      { time: 28, fn: function() { tourAction.hoverPhase(3); } },
+      // 40s: "SOFAR channel" named — highlight it
+      { time: 38, fn: function() { tourAction.hoverPhase(0); tourAction.highlightLayer('sofar'); } },
+      // 55-72s: "military discovered this during World War Two"
+      { time: 55, fn: function() { tourAction.highlightLayer(null); } },
+      // 72-88s: "whale songs... natural waveguide"
+      { time: 72, fn: function() { tourAction.highlightLayer('sofar'); } },
+      { time: 85, fn: function() { tourAction.highlightLayer(null); } }
+    ]
+  },
+  {
+    // Ch4: 69s — "Every single day, as the sun sets..."
+    id: '04-migration', audio: 'audio/04-migration.mp3',
+    caption: 'Every day at sunset, billions of organisms rise from the twilight zone to feed — the largest animal migration on Earth. At dawn, they descend again. This migration pumps carbon from the surface to the deep, helping regulate atmospheric CO\u2082.',
+    actions: [
+      // 0-8s: "sun sets, the largest animal migration"
+      { time: 0, fn: function() { tourAction.ensureSofar(false); tourAction.ensureOverlay(false); tourAction.ensureHeatmap(false); tourAction.ensureMigration(true); tourAction.setLevel(1); tourAction.highlightLayer('migration'); tourAction.hoverPhase(0); } },
+      // 8-20s: "lanternfish, krill... rise from the mesopelagic"
+      { time: 8, fn: function() { tourAction.hoverPhase(2); } },
+      // 20-30s: "At dawn, they descend again"
+      { time: 20, fn: function() { tourAction.hoverPhase(1); } },
+      // 30-42s: "Watch the organisms... cycle between depths"
+      { time: 30, fn: function() { tourAction.hoverPhase(0); tourAction.highlightLayer(null); } },
+      // 42-55s: "critical part of the carbon cycle... carry that carbon deep"
+      { time: 42, fn: function() { tourAction.highlightLayer('snow'); } },
+      // 55-69s: "pumping CO2 out of the atmosphere"
+      { time: 55, fn: function() { tourAction.highlightLayer('migration'); } },
+      { time: 65, fn: function() { tourAction.highlightLayer(null); } }
+    ]
+  },
+  {
+    // Ch5: 71s — "The ocean isn't uniform..."
+    id: '05-modes', audio: 'audio/05-modes.mp3',
+    caption: 'Tropical, polar, upwelling, and vent field — four ocean modes reveal how conditions vary across the globe. From warm stratified tropics to freezing polar seas, nutrient-rich upwelling zones to hydrothermal ecosystems independent of sunlight.',
+    actions: [
+      // 0-5s: "ocean isn't uniform"
+      { time: 0, fn: function() { tourAction.ensureMigration(false); tourAction.ensureSofar(false); tourAction.ensureHeatmap(true); tourAction.ensureOverlay(true); tourAction.setLevel(1); tourAction.hoverPhase(0); tourAction.spotlightElement('#modeToggle'); tourAction.setMode('tropical'); } },
+      // 5-18s: "Tropical waters... sharp thermocline"
+      { time: 5, fn: function() { tourAction.highlightLayer('thermocline'); } },
+      // 18-30s: "polar mode... near-freezing... dissolved oxygen"
+      { time: 18, fn: function() { tourAction.highlightLayer(null); tourAction.setMode('polar'); } },
+      // 30-45s: "Upwelling zones... productive fisheries"
+      { time: 30, fn: function() { tourAction.setMode('upwelling'); } },
+      // 45-60s: "hydrothermal vent fields... tube worms"
+      { time: 45, fn: function() { tourAction.setMode('ventField'); tourAction.setLevel(2); } },
+      // 60-71s: "Life doesn't need a star. It just needs chemistry."
+      { time: 62, fn: function() { tourAction.setLevel(1); tourAction.setMode('tropical'); tourAction.unspotlightAll(); tourAction.highlightLayer(null); tourAction.stopOrbit(); } }
+    ]
+  }
+];
+
+var tourAction = {
+  setLevel: function(g) {
+    state.targetLevel = g;
+    document.querySelectorAll('#levelGroup .gbtn').forEach(function(b) { b.classList.toggle('on', parseInt(b.dataset.level) === g); });
+  },
+  setMode: function(mode) {
+    if (mode === state.activeMode) return;
+    var oldCfg = modeConfigs[state.activeMode];
+    var newCfg = modeConfigs[mode];
+    state.activeMode = mode;
+    document.querySelectorAll('#modeToggle .gbtn').forEach(function(b) { b.classList.toggle('on', b.dataset.mode === mode); });
+    state.targetLevel = newCfg.defaultLevel;
+    document.querySelectorAll('#levelGroup .gbtn').forEach(function(b) { b.classList.toggle('on', parseInt(b.dataset.level) === newCfg.defaultLevel); });
+    var duration = 1200;
+    animateStatValue(document.getElementById('statTemp'), oldCfg.tempNum, newCfg.tempNum, '', '\u00b0C', duration, 0);
+    animateStatValue(document.getElementById('statPressure'), oldCfg.pressureNum, newCfg.pressureNum, '', ' atm', duration, 0);
+    document.getElementById('statLight').textContent = newCfg.light;
+    document.getElementById('statO2').textContent = newCfg.o2;
+    document.getElementById('statSalinity').textContent = newCfg.salinity;
+    document.getElementById('statTempPill').setAttribute('data-tooltip', newCfg.statTooltips.temp);
+    document.getElementById('statPressurePill').setAttribute('data-tooltip', newCfg.statTooltips.pressure);
+    document.getElementById('statLightPill').setAttribute('data-tooltip', newCfg.statTooltips.light);
+    document.getElementById('statO2Pill').setAttribute('data-tooltip', newCfg.statTooltips.o2);
+    document.getElementById('statSalinityPill').setAttribute('data-tooltip', newCfg.statTooltips.salinity);
+    var gradientLegend = document.querySelector('[data-legend="light"]');
+    if (gradientLegend) gradientLegend.setAttribute('data-tooltip', newCfg.legendGradientTooltip);
+  },
+  ensureHeatmap: function(on) { if (state.showHeatmap !== on) { state.showHeatmap = on; document.getElementById('heatmapToggle').classList.toggle('on', on); } },
+  ensureOverlay: function(on) { if (state.showOverlay !== on) { state.showOverlay = on; document.getElementById('overlayToggle').classList.toggle('on', on); } },
+  ensureMigration: function(on) { if (state.showMigration !== on) { state.showMigration = on; document.getElementById('migrationToggle').classList.toggle('on', on); } },
+  ensureSofar: function(on) { if (state.showSofar !== on) { state.showSofar = on; document.getElementById('sofarToggle').classList.toggle('on', on); } },
+  showRecords: function(depths) { state.tourRecords = depths; },
+  highlightLayer: function(name) {
+    state.highlightedLayer = name;
+    document.querySelectorAll('[data-legend]').forEach(function(el) {
+      if (name) el.classList.toggle('dimmed', el.dataset.legend !== name);
+      else el.classList.remove('dimmed');
+    });
+  },
+  hoverPhase: function(n) { state.hoveredPhase = n; phaseTooltipEl.classList.remove('visible'); },
+  startOrbit: function() { tour.orbiting = true; tour.orbitStart = orbitTheta; },
+  stopOrbit: function() { tour.orbiting = false; puck3dContainer.style.opacity = ''; },
+  spotlightElement: function(selector) {
+    tourAction.unspotlightAll();
+    var el = document.querySelector(selector);
+    if (el) el.classList.add('tour-spotlight');
+  },
+  unspotlightAll: function() { document.querySelectorAll('.tour-spotlight').forEach(function(el) { el.classList.remove('tour-spotlight'); }); },
+  resetDefaults: function() {
+    tourAction.setLevel(1); tourAction.setMode('tropical');
+    tourAction.ensureHeatmap(true); tourAction.ensureOverlay(true);
+    tourAction.ensureMigration(false); tourAction.ensureSofar(false); tourAction.showRecords(null);
+    tourAction.highlightLayer(null); tourAction.hoverPhase(0); tourAction.unspotlightAll();
+  }
+};
+
+// ============================================================
+// TOUR ENGINE
+// ============================================================
+function tourStart() {
+  if (tour.active) return;
+  tour.ambianceWasPlaying = ambiancePlaying;
+  if (ambiancePlaying) stopAmbiance();
+  tour.savedState = {
+    targetLevel: state.targetLevel, activeMode: state.activeMode,
+    showHeatmap: state.showHeatmap, showOverlay: state.showOverlay,
+    showMigration: state.showMigration, showSofar: state.showSofar,
+    highlightedLayer: state.highlightedLayer, hoveredPhase: state.hoveredPhase
+  };
+  tour.blurbOriginalHTML = document.querySelector('.info-blurb').innerHTML;
+  tour.active = true; tour.paused = false; tour.currentChapter = -1;
+  document.body.classList.add('tour-active');
+  var progressEl = document.getElementById('tourProgress');
+  progressEl.innerHTML = '';
+  tourChapters.forEach(function(ch, i) {
+    var pip = document.createElement('div'); pip.className = 'tour-pip'; pip.dataset.index = i;
+    progressEl.appendChild(pip);
+  });
+  // Start ambient sound for tour — ramp up over 6 seconds
+  tourStartAmbient();
+  // Delay first chapter so ambient breathes for 6 seconds first
+  setTimeout(function() { if (tour.active) tourNextChapter(); }, 6000);
+}
+
+// Tour ambient sound helpers
+function tourStartAmbient() {
+  initAudioContext();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Stop any existing layers
+  ambianceLayers.forEach(function(layer) { try { layer.source.stop(); } catch(e) {} });
+  ambianceLayers = [];
+  var loadPromises = ambianceSources.map(function(cfg) {
+    return loadAmbianceBuffer(cfg.url).then(function(buffer) { return { buffer: buffer, cfg: cfg }; });
+  });
+  Promise.all(loadPromises).then(function(results) {
+    var now = audioCtx.currentTime;
+    results.forEach(function(r) {
+      var layer = createLoopingLayer(r.buffer, r.cfg);
+      layer.source.start(now + r.cfg.fadeIn * 0.5);
+      ambianceLayers.push(layer);
+    });
+    // Ramp master from 0 to full over 6 seconds
+    ambianceMaster.gain.setValueAtTime(0, now);
+    ambianceMaster.gain.linearRampToValueAtTime(1.0, now + 6.0);
+    ambiancePlaying = true;
+  }).catch(function() {});
+}
+
+function tourDuckAmbient() {
+  // Duck ambient volume down when narration starts
+  if (!audioCtx || !ambiancePlaying) return;
+  var now = audioCtx.currentTime;
+  ambianceMaster.gain.setValueAtTime(ambianceMaster.gain.value, now);
+  ambianceMaster.gain.linearRampToValueAtTime(0.12, now + 1.5);
+}
+
+function tourUnduckAmbient() {
+  // Bring ambient back up between chapters
+  if (!audioCtx || !ambiancePlaying) return;
+  var now = audioCtx.currentTime;
+  ambianceMaster.gain.setValueAtTime(ambianceMaster.gain.value, now);
+  ambianceMaster.gain.linearRampToValueAtTime(0.85, now + 2.0);
+}
+
+function tourFadeOutAmbient() {
+  // Taper ambient to zero at tour end
+  if (!audioCtx || !ambiancePlaying) return;
+  var now = audioCtx.currentTime;
+  ambianceMaster.gain.setValueAtTime(ambianceMaster.gain.value, now);
+  ambianceMaster.gain.linearRampToValueAtTime(0, now + 6.0);
+  setTimeout(function() {
+    ambianceLayers.forEach(function(layer) { try { layer.source.stop(); } catch(e) {} });
+    ambianceLayers = [];
+    ambiancePlaying = false;
+    ambianceBtn.classList.remove('ambiance-on');
+    ambianceBtn.querySelector('.material-symbols-outlined').textContent = 'music_note';
+  }, 7000);
+}
+
+function tourNextChapter() {
+  tour.currentChapter++;
+  if (tour.currentChapter >= tourChapters.length) { tourEnd(); return; }
+  var chapter = tourChapters[tour.currentChapter];
+  tour.actionIndex = 0;
+  document.querySelectorAll('.tour-pip').forEach(function(pip, i) {
+    pip.classList.remove('active', 'done');
+    if (i < tour.currentChapter) pip.classList.add('done');
+    else if (i === tour.currentChapter) pip.classList.add('active');
+  });
+  var blurbEl = document.querySelector('.info-blurb');
+  var chars = chapter.caption.split('');
+  var chapterTitle = tourChapterTitles[tour.currentChapter] || 'Guided Tour';
+  blurbEl.innerHTML = '<h3>' + chapterTitle + '</h3><p>' +
+    chars.map(function(ch, i) {
+      if (ch === ' ') return '<span class="tour-char" data-ci="' + i + '"> </span>';
+      return '<span class="tour-char" data-ci="' + i + '">' + ch + '</span>';
+    }).join('') + '</p>';
+  tour.charEls = blurbEl.querySelectorAll('.tour-char');
+  tour.audioDuration = 0;
+  var wordCount = chapter.caption.split(/\s+/).length;
+  var fallbackDuration = Math.max(8, (wordCount / 140) * 60 + 2);
+  tour.fallbackStart = 0; tour.usingFallback = false;
+  var fallbackScheduled = false;
+  function activateFallback(reason) {
+    if (fallbackScheduled) return; fallbackScheduled = true;
+    tour.usingFallback = true; tour.audioDuration = fallbackDuration;
+    tour.fallbackStart = performance.now() / 1000;
+    setTimeout(function() {
+      if (tour.active && tour.currentChapter === tourChapters.indexOf(chapter)) {
+        tourUnduckAmbient();
+        setTimeout(function() { if (tour.active) tourNextChapter(); }, 6000);
+      }
+    }, fallbackDuration * 1000);
+  }
+  if (tour.audio) { tour.audio.pause(); tour.audio.onended = null; tour.audio.onloadedmetadata = null; tour.audio.onerror = null; }
+  tour.audio = tourAudioCache[chapter.id];
+  tour.audio.currentTime = 0;
+  tour.audio.onended = function() {
+    // Bring ambient back up between chapters, wait 6s, then start next
+    tourUnduckAmbient();
+    setTimeout(function() { if (tour.active) tourNextChapter(); }, 6000);
+  };
+  tour.audio.onloadedmetadata = function() { if (!tour.usingFallback && tour.audio.duration > 0) tour.audioDuration = tour.audio.duration; };
+  tour.audio.onerror = function() { activateFallback('audio load error'); };
+  tour.audio.play().then(function() { tourDuckAmbient(); }).catch(function(e) { activateFallback(e.name || 'play() rejected'); });
+  tourTick();
+}
+
+function tourTick() {
+  if (!tour.active) return;
+  if (tour.paused) { tour.tickRAF = requestAnimationFrame(tourTick); return; }
+  var chapter = tourChapters[tour.currentChapter];
+  if (!chapter) return;
+  var currentTime = tour.usingFallback ? (performance.now() / 1000) - tour.fallbackStart : (tour.audio ? tour.audio.currentTime : 0);
+  while (tour.actionIndex < chapter.actions.length && currentTime >= chapter.actions[tour.actionIndex].time) {
+    chapter.actions[tour.actionIndex].fn(); tour.actionIndex++;
+  }
+  if (!tour.usingFallback && tour.audio && tour.audio.duration > 0) tour.audioDuration = tour.audio.duration;
+  if (tour.audioDuration > 0 && tour.charEls && tour.charEls.length > 0) {
+    var charWindow = tour.audioDuration * 0.92;
+    var charsToReveal = Math.min(Math.floor((currentTime / charWindow) * tour.charEls.length), tour.charEls.length);
+    for (var ci = 0; ci < charsToReveal; ci++) tour.charEls[ci].classList.add('revealed');
+  }
+  if (tour.orbiting) {
+    orbitTheta = tour.orbitStart + Math.sin(currentTime * 0.25) * 0.6;
+    orbitPhi = 1.1 + Math.sin(currentTime * 0.15) * 0.12;
+    puck3dContainer.style.opacity = '0.85';
+  }
+  tour.tickRAF = requestAnimationFrame(tourTick);
+}
+
+function tourEnd() {
+  tour.active = false; tour.paused = false;
+  document.body.classList.remove('tour-active');
+  if (tour.audio) { tour.audio.pause(); tour.audio.currentTime = 0; tour.audio.onended = null; tour.audio.onloadedmetadata = null; tour.audio.onerror = null; tour.audio = null; }
+  if (tour.tickRAF) { cancelAnimationFrame(tour.tickRAF); tour.tickRAF = null; }
+  tour.orbiting = false; puck3dContainer.style.opacity = '';
+  tourFadeOutAmbient();
+  document.querySelector('.info-blurb').innerHTML = tour.blurbOriginalHTML;
+  tour.charEls = [];
+  tourAction.resetDefaults();
+  if (tour.savedState) {
+    tourAction.setLevel(tour.savedState.targetLevel);
+    if (tour.savedState.activeMode !== 'tropical') tourAction.setMode(tour.savedState.activeMode);
+    tourAction.ensureHeatmap(tour.savedState.showHeatmap);
+    tourAction.ensureOverlay(tour.savedState.showOverlay);
+    tourAction.ensureMigration(tour.savedState.showMigration);
+    tourAction.ensureSofar(tour.savedState.showSofar);
+    tour.savedState = null;
+  }
+  pushStateToURL();
+}
+
+function tourTogglePause() {
+  if (!tour.active) return;
+  tour.paused = !tour.paused;
+  document.getElementById('tourPauseBtn').querySelector('.material-symbols-outlined').textContent = tour.paused ? 'play_arrow' : 'pause';
+  if (tour.usingFallback) {
+    if (tour.paused) tour.fallbackPausedAt = performance.now() / 1000;
+    else tour.fallbackStart += (performance.now() / 1000) - tour.fallbackPausedAt;
+  }
+  if (tour.audio) { if (tour.paused) tour.audio.pause(); else tour.audio.play().catch(function() {}); }
+}
+
+function tourSkip() {
+  if (!tour.active) return;
+  tourAction.highlightLayer(null); tourAction.hoverPhase(0); tourAction.unspotlightAll();
+  if (tour.audio) tour.audio.pause();
+  tourNextChapter();
+}
+
+document.getElementById('tourStartBtn').addEventListener('click', tourStart);
+document.getElementById('tourPauseBtn').addEventListener('click', tourTogglePause);
+document.getElementById('tourSkipBtn').addEventListener('click', tourSkip);
+document.getElementById('tourExitBtn').addEventListener('click', tourEnd);
+
+document.addEventListener('keydown', function(e) {
+  if (!tour.active) return;
+  if (e.key === 'Escape') { e.preventDefault(); tourEnd(); }
+  else if (e.key === ' ') { e.preventDefault(); tourTogglePause(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); tourSkip(); }
+});
+
+var tourAudioCache = {};
+tourChapters.forEach(function(ch) {
+  var a = new Audio(); a.preload = 'auto'; a.src = ch.audio;
+  tourAudioCache[ch.id] = a;
+});
+</script>
+</body>
+</html>
